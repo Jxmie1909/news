@@ -289,14 +289,14 @@ for each row execute function private.block_signups();
 -- ---------------------------------------------------------------------------
 create or replace function private.bump_config() returns void
 language sql security definer set search_path = '' as $$
-  update private.state set config_version = config_version + 1;
+  update private.state set config_version = config_version + 1 where id;
 $$;
 
 -- Profil geändert (Themen, Schwellen, Sprachen …): Konfiguration neu laden und Meldungen neu bewerten
 create or replace function private.bump_profile() returns void
 language sql security definer set search_path = '' as $$
   update private.state set config_version = config_version + 1,
-         profile_version = profile_version + 1, profile_changed_at = now();
+         profile_version = profile_version + 1, profile_changed_at = now() where id;
 $$;
 
 create or replace function private.gnews_query(p_keywords text[]) returns text
@@ -705,9 +705,9 @@ begin
     elsif p_value = 2 and st.pushed_at is null and not st.backfill then v_adjust := -3;
     end if;
     if v_adjust <> 0 then
-      if v_domain = 'stocks' then update public.settings set thr_stocks = thr_stocks + v_adjust;
-      elsif v_domain = 'topics' then update public.settings set thr_topics = thr_topics + v_adjust;
-      else update public.settings set thr_world = thr_world + v_adjust;
+      if v_domain = 'stocks' then update public.settings set thr_stocks = thr_stocks + v_adjust where id;
+      elsif v_domain = 'topics' then update public.settings set thr_topics = thr_topics + v_adjust where id;
+      else update public.settings set thr_world = thr_world + v_adjust where id;
       end if;
     end if;
   end if;
@@ -729,7 +729,7 @@ create or replace function public.mark_seen() returns void
 language plpgsql security definer set search_path = '' as $$
 begin
   perform private.require_owner();
-  update public.settings set last_seen_at = now();
+  update public.settings set last_seen_at = now() where id;
 end $$;
 
 create or replace function public.mark_read(p_ids bigint[]) returns void
@@ -828,7 +828,7 @@ create or replace function public.set_categories(p_categories text[]) returns vo
 language plpgsql security definer set search_path = '' as $$
 begin
   perform private.require_owner();
-  update public.settings set categories = coalesce(p_categories, '{}');
+  update public.settings set categories = coalesce(p_categories, '{}') where id;
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -960,7 +960,7 @@ begin
     where src.id = (r ->> 'id')::uuid;
   end loop;
   update private.state set lock_until = null, last_tick_at = now(),
-    last_tick_ms = (p_info ->> 'ms')::int, last_tick_info = p_info;
+    last_tick_ms = (p_info ->> 'ms')::int, last_tick_info = p_info where id;
 end $$;
 
 create or replace function public.known_hashes(p_hashes text[]) returns text[]
@@ -1162,7 +1162,7 @@ $$;
 
 create or replace function public.rescore_done(p_version bigint) returns void
 language sql security definer set search_path = '' as $$
-  update private.state set rescore_version = greatest(rescore_version, p_version);
+  update private.state set rescore_version = greatest(rescore_version, p_version) where id;
 $$;
 
 create or replace function public.service_config() returns jsonb
@@ -1185,8 +1185,8 @@ begin
     on conflict (key) do update set value = excluded.value, updated_at = now();
   end if;
   if p_key = 'gemini_api_key' then
-    update public.settings set has_gemini_key = coalesce(p_value, '') <> '';
-    update private.state set llm_paused_until = null, llm_last_error = null;
+    update public.settings set has_gemini_key = coalesce(p_value, '') <> '' where id;
+    update private.state set llm_paused_until = null, llm_last_error = null where id;
   end if;
   perform private.bump_config();
 end $$;
@@ -1207,12 +1207,13 @@ begin
     llm_day = v_day,
     llm_paused_until = case when p_paused_until is not null then p_paused_until when p_ok then null else llm_paused_until end,
     llm_last_error = case when p_error is not null then left(p_error, 300) when p_ok then null else llm_last_error end,
-    llm_last_ok_at = case when p_ok then now() else llm_last_ok_at end;
+    llm_last_ok_at = case when p_ok then now() else llm_last_ok_at end
+  where id;
 end $$;
 
 create or replace function public.service_set_digest_key(p_key text) returns void
 language sql security definer set search_path = '' as $$
-  update private.state set last_digest_key = p_key;
+  update private.state set last_digest_key = p_key where id;
 $$;
 
 create or replace function public.service_digest(p_since timestamptz) returns jsonb
@@ -1232,7 +1233,7 @@ begin
    where sort_at < now() - interval '10 days' and last_seen_at < now() - interval '7 days'
      and not saved and feedback is null;
   delete from public.push_log where sent_at < now() - interval '60 days';
-  update private.token_df set df = df * 0.75;
+  update private.token_df set df = df * 0.75 where true;
   delete from private.token_df where df < 0.4;
 end $$;
 
