@@ -62,6 +62,24 @@ test("Feeds: Atom und Google News", () => {
   assert.equal(g[0].summary, "");
 });
 
+test("Feeds: Bing-Nachrichtensuche", () => {
+  const xml = `<rss><channel><item><title>Nvidia: Wieder K&#246;nig</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;url=https%3a%2f%2fwww.zeit.de%2fdigital%2fnvidia&amp;c=1&amp;mkt=de-de</link><description>US-Pr&#228;sident holt den Chef zur&#252;ck ...</description><pubDate>${new Date().toUTCString()}</pubDate><News:Source>ZEIT ONLINE</News:Source><News:Image>http://www.bing.com/th?id=X&amp;pid=News</News:Image></item></channel></rss>`;
+  const it = feeds.cleanBingItem(feeds.parseFeed(xml)[0]);
+  assert.equal(it.title, "Nvidia: Wieder König");
+  assert.equal(it.url, "https://www.zeit.de/digital/nvidia");
+  assert.equal(it.publisher, "ZEIT ONLINE");
+  assert.equal(it.publisher_url, "https://www.zeit.de");
+  assert.equal(it.image, "https://www.bing.com/th?id=X&pid=News");
+  assert.match(feeds.sourceUrl({ kind: "gnews", url: '"GTA 6" OR "GTA VI" when:2d', lang: "de" }), /^https:\/\/www\.bing\.com\/news\/search\?q=%22GTA%206%22%20OR%20%22GTA%20VI%22&format=rss&setlang=de-DE&cc=DE&qft=/);
+});
+
+test("Feeds: Zeichensatz wird beachtet", async () => {
+  const bytes = Uint8Array.from([...'<?xml version="1.0" encoding="ISO-8859-1"?><t>erw'].map((c) => c.charCodeAt(0)).concat([0xe4], [...'gt</t>'].map((c) => c.charCodeAt(0))));
+  assert.match(await feeds.readText(new Response(bytes, { headers: { "content-type": "text/xml" } })), /erwägt/);
+  assert.match(await feeds.readText(new Response(bytes, { headers: { "content-type": "text/xml; charset=iso-8859-1" } })), /erwägt/);
+  assert.match(await feeds.readText(new Response(new TextEncoder().encode("<t>erwägt</t>"), { headers: { "content-type": "application/xml; charset=utf-8" } })), /erwägt/);
+});
+
 test("Feeds: Bluesky", () => {
   const json = { feed: [
     { post: { uri: "at://did:plc:x/app.bsky.feed.post/3abc", author: { handle: "reuters.com" }, indexedAt: new Date().toISOString(),

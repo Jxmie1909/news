@@ -10,17 +10,16 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 ('rss:zdf', 'ZDFheute', 'rss', 'https://www.zdf.de/rss/zdf/nachrichten', 'de', 'top', 1.15, false, 120, true, true),
 ('rss:dlf', 'Deutschlandfunk', 'rss', 'https://www.deutschlandfunk.de/nachrichten-100.rss', 'de', 'top', 1.15, false, 120, true, true),
 ('rss:sz', 'Süddeutsche Zeitung', 'rss', 'https://rss.sueddeutsche.de/rss/Topthemen', 'de', 'top', 1.1, false, 150, true, true),
-('rss:gnews-top-de', 'Google News Schlagzeilen', 'rss', 'https://news.google.com/rss?hl=de&gl=DE&ceid=DE:de', 'de', 'top', 1.2, false, 90, true, true),
-('bsky:tagesschau', 'tagesschau', 'bluesky', 'tagesschau.de', 'de', 'top', 1.25, false, 45, true, true),
+('bsky:tagesschau', 'tagesschau', 'bluesky', 'tagesschau.bsky.social', 'de', 'top', 1.25, false, 45, true, true),
+('bsky:spiegel', 'DER SPIEGEL', 'bluesky', 'spiegel.de', 'de', 'top', 1.15, false, 45, true, true),
+('bsky:zeit', 'ZEIT ONLINE', 'bluesky', 'zeit.de', 'de', 'top', 1.15, false, 60, true, true),
 ('rss:bbc', 'BBC News', 'rss', 'https://feeds.bbci.co.uk/news/rss.xml', 'en', 'top', 1.25, false, 60, true, true),
 ('rss:guardian', 'The Guardian', 'rss', 'https://www.theguardian.com/world/rss', 'en', 'top', 1.1, false, 120, true, true),
 ('rss:nyt', 'New York Times', 'rss', 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml', 'en', 'top', 1.2, false, 120, true, true),
 ('rss:npr', 'NPR', 'rss', 'https://feeds.npr.org/1001/rss.xml', 'en', 'top', 1.0, false, 180, true, true),
 ('rss:aljazeera', 'Al Jazeera', 'rss', 'https://www.aljazeera.com/xml/rss/all.xml', 'en', 'top', 1.0, false, 180, true, true),
-('rss:gnews-top-en', 'Google News Top Stories', 'rss', 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 'en', 'top', 1.2, false, 90, true, true),
 ('bsky:reuters', 'Reuters', 'bluesky', 'reuters.com', 'en', 'top', 1.3, false, 30, true, true),
 ('bsky:ap', 'AP News', 'bluesky', 'apnews.com', 'en', 'top', 1.3, false, 30, true, true),
-('gnews:reuters', 'Reuters', 'gnews', 'site:reuters.com when:1h', 'en', 'top', 1.3, false, 90, true, true),
 
 -- Börse & Finanzen
 ('rss:handelsblatt', 'Handelsblatt', 'rss', 'https://www.handelsblatt.com/contentexport/feed/top-themen', 'de', 'boerse', 1.15, false, 120, false, false),
@@ -32,7 +31,6 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 ('rss:bloomberg-markets', 'Bloomberg Markets', 'rss', 'https://feeds.bloomberg.com/markets/news.rss', 'en', 'boerse', 1.25, false, 90, false, false),
 ('rss:cnbc', 'CNBC', 'rss', 'https://www.cnbc.com/id/100003114/device/rss/rss.html', 'en', 'boerse', 1.15, false, 90, false, false),
 ('rss:seekingalpha', 'Seeking Alpha', 'rss', 'https://seekingalpha.com/market_currents.xml', 'en', 'boerse', 1.0, false, 60, false, false),
-('rss:yahoo-finance', 'Yahoo Finance', 'rss', 'https://finance.yahoo.com/news/rssindex', 'en', 'boerse', 1.0, false, 120, false, false),
 ('bsky:bloomberg', 'Bloomberg', 'bluesky', 'bloomberg.com', 'en', 'boerse', 1.25, false, 45, false, false),
 ('bsky:cnbc', 'CNBC', 'bluesky', 'cnbc.com', 'en', 'boerse', 1.15, false, 60, false, false),
 ('bsky:ft', 'Financial Times', 'bluesky', 'financialtimes.com', 'en', 'boerse', 1.2, false, 60, false, false),
@@ -52,7 +50,6 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 ('rss:bbc-tech', 'BBC Technology', 'rss', 'https://feeds.bbci.co.uk/news/technology/rss.xml', 'en', 'tech', 1.15, false, 240, false, false),
 ('rss:engadget', 'Engadget', 'rss', 'https://www.engadget.com/rss.xml', 'en', 'tech', 1.0, false, 240, false, false),
 ('rss:9to5mac', '9to5Mac', 'rss', 'https://9to5mac.com/feed/', 'en', 'tech', 1.0, false, 240, false, false),
-('rss:hn', 'Hacker News (Top)', 'rss', 'https://hnrss.org/frontpage?points=300', 'en', 'tech', 0.9, false, 300, false, false),
 
 -- KI
 ('rss:the-decoder-de', 'THE DECODER', 'rss', 'https://the-decoder.de/feed/', 'de', 'ki', 1.05, false, 240, false, false),
@@ -61,11 +58,8 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 ('rss:venturebeat-ai', 'VentureBeat AI', 'rss', 'https://venturebeat.com/category/ai/feed/', 'en', 'ki', 1.0, false, 300, false, false),
 ('rss:openai', 'OpenAI', 'rss', 'https://openai.com/news/rss.xml', 'en', 'ki', 1.25, false, 180, false, false),
 ('rss:google-ai', 'Google AI Blog', 'rss', 'https://blog.google/technology/ai/rss/', 'en', 'ki', 1.15, false, 300, false, false),
-('rss:heise-ki', 'heise KI', 'rss', 'https://www.heise.de/thema/Kuenstliche-Intelligenz/rss/news-atom.xml', 'de', 'ki', 1.05, false, 240, false, false),
 
 -- Gaming
-('rss:gamestar', 'GameStar', 'rss', 'https://www.gamestar.de/news/rss/news.rss', 'de', 'gaming', 1.05, false, 180, false, false),
-('rss:gamepro', 'GamePro', 'rss', 'https://www.gamepro.de/rss/gamepro.rss', 'de', 'gaming', 1.0, false, 240, false, false),
 ('rss:eurogamer-de', 'Eurogamer.de', 'rss', 'https://www.eurogamer.de/feed', 'de', 'gaming', 1.0, false, 240, false, false),
 ('rss:ign', 'IGN', 'rss', 'https://feeds.feedburner.com/ign/all', 'en', 'gaming', 1.1, false, 150, false, false),
 ('rss:eurogamer', 'Eurogamer', 'rss', 'https://www.eurogamer.net/feed', 'en', 'gaming', 1.05, false, 240, false, false),
@@ -118,14 +112,11 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 -- Sport
 ('rss:kicker', 'kicker', 'rss', 'https://newsfeed.kicker.de/news/aktuell', 'de', 'sport', 1.15, false, 120, false, false),
 ('rss:sportschau', 'Sportschau', 'rss', 'https://www.sportschau.de/index~rss2.xml', 'de', 'sport', 1.15, false, 180, false, false),
-('rss:sport1', 'SPORT1', 'rss', 'https://www.sport1.de/news.rss', 'de', 'sport', 1.0, false, 180, false, false),
 ('rss:transfermarkt', 'Transfermarkt', 'rss', 'https://www.transfermarkt.de/rss/news', 'de', 'sport', 1.05, false, 240, false, false),
-('rss:motorsport-f1', 'Motorsport-Total F1', 'rss', 'https://www.motorsport-total.com/rss/f1.xml', 'de', 'sport', 1.0, false, 300, false, false),
 ('rss:bbc-sport', 'BBC Sport', 'rss', 'https://feeds.bbci.co.uk/sport/rss.xml', 'en', 'sport', 1.15, false, 180, false, false),
 ('rss:espn', 'ESPN', 'rss', 'https://www.espn.com/espn/rss/news', 'en', 'sport', 1.1, false, 180, false, false),
 
 -- Auto & Mobilität
-('rss:ams', 'auto motor und sport', 'rss', 'https://www.auto-motor-und-sport.de/feed/', 'de', 'auto', 1.05, false, 300, false, false),
 ('rss:electrive', 'electrive', 'rss', 'https://www.electrive.net/feed/', 'de', 'auto', 1.05, false, 300, false, false),
 ('rss:heise-autos', 'heise Autos', 'rss', 'https://www.heise.de/autos/rss/news-atom.xml', 'de', 'auto', 1.0, false, 300, false, false),
 ('rss:electrek', 'Electrek', 'rss', 'https://electrek.co/feed/', 'en', 'auto', 1.05, false, 240, false, false),
@@ -139,7 +130,6 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 
 -- Musik & Popkultur
 ('rss:rollingstone-de', 'Rolling Stone', 'rss', 'https://www.rollingstone.de/feed/', 'de', 'musik', 1.0, false, 300, false, false),
-('rss:laut', 'laut.de', 'rss', 'https://www.laut.de/_feed/news', 'de', 'musik', 1.0, false, 300, false, false),
 ('rss:billboard', 'Billboard', 'rss', 'https://www.billboard.com/feed/', 'en', 'musik', 1.1, false, 300, false, false),
 ('rss:pitchfork', 'Pitchfork', 'rss', 'https://pitchfork.com/feed/feed-news/rss', 'en', 'musik', 1.0, false, 300, false, false),
 
@@ -149,8 +139,6 @@ insert into public.sources (key, name, kind, url, lang, category, weight, breaki
 ('rss:bbc-health', 'BBC Health', 'rss', 'https://feeds.bbci.co.uk/news/health/rss.xml', 'en', 'gesundheit', 1.15, false, 300, false, false),
 
 -- Verbraucher & Alltag
-('rss:test-de', 'Stiftung Warentest', 'rss', 'https://www.test.de/rss/alles/', 'de', 'verbraucher', 1.1, false, 600, false, false),
-('rss:finanztip', 'Finanztip', 'rss', 'https://www.finanztip.de/feed/', 'de', 'verbraucher', 1.0, false, 600, false, false),
 ('rss:tagesschau-verbraucher', 'tagesschau Verbraucher', 'rss', 'https://www.tagesschau.de/wirtschaft/verbraucher/index~rss2.xml', 'de', 'verbraucher', 1.2, false, 300, false, false),
 
 -- US-Börsenaufsicht: Pflichtmeldungen (8-K). Nur aktiv, wenn eine Kontaktadresse hinterlegt ist.

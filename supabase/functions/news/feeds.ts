@@ -104,13 +104,14 @@ export function parseFeed(xml: string): RawItem[] {
     const rawContent = cdata(tag(b, "content:encoded") ?? tag(b, "content") ?? "");
     const summary = truncate(stripTags(rawDesc || rawContent), 420);
     const date = parseDate(cdata(tag(b, "pubDate") ?? tag(b, "dc:date") ?? tag(b, "published") ?? tag(b, "updated") ?? tag(b, "date") ?? ""));
-    const srcName = stripTags(cdata(tag(b, "source")));
+    const srcName = stripTags(cdata(tag(b, "source") ?? tag(b, "News:Source") ?? ""));
     const srcUrl = attr(b, "source", "url");
+    const newsImage = decodeEntities(cdata(tag(b, "News:Image") ?? "")).trim();
     items.push({
       title,
       url,
       summary: summary === title ? "" : summary,
-      image: firstImage(b, rawDesc + " " + rawContent),
+      image: firstImage(b, rawDesc + " " + rawContent) ?? (/^https?:\/\//.test(newsImage) ? newsImage : null),
       published_at: date,
       publisher: srcName || null,
       publisher_url: srcUrl,
@@ -139,15 +140,18 @@ export function isGoogleNewsUrl(u: string): boolean {
   return /^https?:\/\/news\.google\.com\//i.test(u);
 }
 
-const GN_EDITION: Record<string, string> = {
-  de: "hl=de&gl=DE&ceid=DE:de",
-  en: "hl=en-US&gl=US&ceid=US:en",
+// Themensuche: Bing-Nachrichtensuche als Feed (Google News blockiert Abrufe aus Rechenzentren).
+const BING_MARKET: Record<string, string> = {
+  de: "setlang=de-DE&cc=DE",
+  en: "setlang=en-US&cc=US",
 };
 
 export function sourceUrl(src: SourceRow): string {
   switch (src.kind) {
-    case "gnews":
-      return `https://news.google.com/rss/search?q=${encodeURIComponent(src.url)}&${GN_EDITION[src.lang] ?? GN_EDITION.en}`;
+    case "gnews": {
+      const q = src.url.replace(/\s+when:\d+[hd]\s*$/i, "");
+      return `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss&${BING_MARKET[src.lang] ?? BING_MARKET.en}&qft=${encodeURIComponent('sortbydate="1"')}`;
+    }
     case "yahoo":
       return `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(src.url)}&region=US&lang=en-US`;
     case "bluesky":
@@ -155,6 +159,24 @@ export function sourceUrl(src: SourceRow): string {
     default:
       return src.url;
   }
+}
+
+/** Bing verpackt den Artikel-Link in eine Weiterleitung und nennt den Anbieter in einem eigenen Feld. */
+export function cleanBingItem(it: RawItem): RawItem {
+  let url = it.url;
+  try {
+    const u = new URL(url);
+    if (/(^|\.)bing\.com$/i.test(u.hostname) && u.pathname.includes("apiclick")) {
+      const real = u.searchParams.get("url");
+      if (real && /^https?:\/\//i.test(real)) url = real;
+    }
+  } catch { /* Link bleibt wie er ist */ }
+  let publisherUrl: string | null = null;
+  try {
+    publisherUrl = new URL(url).origin;
+  } catch { /* egal */ }
+  const image = it.image && /^https?:\/\//.test(it.image) ? it.image.replace(/^http:/, "https:") : null;
+  return { ...it, url, publisher: it.publisher || null, publisher_url: publisherUrl, image };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -257,6 +279,21 @@ export function parseSec(xml: string): RawItem[] {
   return out;
 }
 
+/** Antwort als Text lesen und dabei den angegebenen Zeichensatz beachten (manche Feeds sind nicht UTF-8). */
+export async function readText(r: Response): Promise<string> {
+  const buf = new Uint8Array(await r.arrayBuffer());
+  let charset = /charset=([\w-]+)/i.exec(r.headers.get("content-type") ?? "")?.[1]?.toLowerCase() ?? "";
+  if (!charset) {
+    const head = new TextDecoder("latin1").decode(buf.subarray(0, 200));
+    charset = /encoding=["']([\w-]+)["']/i.exec(head)?.[1]?.toLowerCase() ?? "utf-8";
+  }
+  try {
+    return new TextDecoder(charset).decode(buf);
+  } catch {
+    return new TextDecoder("utf-8").decode(buf);
+  }
+}
+
 const UA_BROWSER = "Mozilla/5.0 (compatible; NewsReader/1.0; personal news reader)";
 
 export async function fetchSource(src: SourceRow, opts: { secContact?: string } = {}): Promise<FetchResult> {
@@ -295,7 +332,7 @@ export async function fetchSource(src: SourceRow, opts: { secContact?: string } 
     const lm = r.headers.get("last-modified");
     if (etag) res.etag = etag;
     if (lm) res.last_modified = lm;
-    const body = await r.text();
+    const body = await readText(r);
     if (body.length > 4_000_000) {
       res.error = "Antwort zu groß";
       return res;
@@ -310,9 +347,8 @@ export async function fetchSource(src: SourceRow, opts: { secContact?: string } 
         res.error = "Kein gültiger Feed";
         return res;
       }
-      if (src.kind === "gnews" || items.some((i) => isGoogleNewsUrl(i.url))) {
-        items = items.map((i) => (isGoogleNewsUrl(i.url) ? cleanGoogleItem(i) : i));
-      }
+      if (src.kind === "gnews") items = items.map(cleanBingItem);
+      else if (items.some((i) => isGoogleNewsUrl(i.url))) items = items.map((i) => (isGoogleNewsUrl(i.url) ? cleanGoogleItem(i) : i));
       res.items = items;
     }
     res.ok = true;

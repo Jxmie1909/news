@@ -306,7 +306,7 @@ language sql immutable set search_path = '' as $$
         where length(trim(k)) >= 2 order by ord limit 6) q;
 $$;
 
--- Quellen eines Themas anlegen/aktualisieren (Google-News-Suche, Yahoo-Finanzfeed)
+-- Quellen eines Themas anlegen/aktualisieren (Nachrichtensuche, Yahoo-Finanzfeed)
 create or replace function private.sync_topic_sources(p_topic public.topics) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -330,7 +330,7 @@ begin
       v_key := 'gnews:' || p_topic.id || ':' || v_lang;
       v_keep := v_keep || v_key;
       insert into public.sources (key, name, kind, url, lang, category, weight, interval_sec, topic_id)
-      values (v_key, 'Google News · ' || p_topic.name, 'gnews', v_q || ' when:2d', v_lang, p_topic.category, 1.0, v_iv, p_topic.id)
+      values (v_key, 'Suche · ' || p_topic.name, 'gnews', v_q || ' when:2d', v_lang, p_topic.category, 1.0, v_iv, p_topic.id)
       on conflict (key) do update set
         name = excluded.name, url = excluded.url, category = excluded.category,
         interval_sec = excluded.interval_sec, enabled = true,

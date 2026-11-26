@@ -13,7 +13,7 @@ bewertet sie nach deinen Interessen und schickt bei Wichtigem sofort einen Push.
 
 ## Wie eine Meldung zum Push wird
 
-1. Alle 15 Sekunden werden die fälligen Quellen abgerufen (RSS, Google-News-Suchen zu deinen Themen, Bluesky-Konten von Nachrichtenagenturen, Yahoo-Finanzfeeds).
+1. Alle 15 Sekunden werden die fälligen Quellen abgerufen (RSS, Nachrichtensuchen zu deinen Themen, Bluesky-Konten von Nachrichtenagenturen, Yahoo-Finanzfeeds).
 2. Neue Artikel werden mit ähnlichen Schlagzeilen zu einer Meldung gebündelt.
 3. Jede Meldung bekommt eine **Wichtigkeit** (0–100: Art des Ereignisses, Zahl der Quellen, auf Wunsch KI-Einschätzung) und eine **Relevanz** für dich (Themen, Daumen).
 4. Liegt die Wichtigkeit über deiner Push-Grenze und passt ein Push-Thema, geht sofort eine Nachricht raus – außer in der Ruhezeit oder wenn das Tageslimit erreicht ist.

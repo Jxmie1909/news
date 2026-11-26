@@ -114,8 +114,9 @@ assert.equal(srcs.filter((s) => s.startsWith("gnews:")).length, 6);
 assert.ok(srcs.some((s) => s.startsWith("yahoo:") && s.endsWith("=45")));
 assert.equal(sql("select ticker from price_state"), "NVDA");
 assert.match(sql(`select url from sources where key = 'gnews:${nv.id}:de'`), /^"Nvidia" OR "NVDA" when:2d$/);
-ok("Zu jedem Thema entstehen Suchquellen (Google News de/en, Yahoo für die Aktie)");
-await sb.from("settings").update({ muted: ["Dschungelcamp"], site_url: "https://beispiel.github.io/news/" }).eq("id", true);
+ok("Zu jedem Thema entstehen Suchquellen (Nachrichtensuche de/en, Yahoo für die Aktie)");
+// Ruhezeit zunächst aus, damit der Test zu jeder Uhrzeit gleich läuft (die Ruhezeit wird weiter unten eigens geprüft)
+await sb.from("settings").update({ muted: ["Dschungelcamp"], site_url: "https://beispiel.github.io/news/", quiet_enabled: false }).eq("id", true);
 
 step("Push-Gerät anmelden");
 const { subscription } = await mock();

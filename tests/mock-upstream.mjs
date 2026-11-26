@@ -15,7 +15,7 @@ const authSecret = crypto.randomBytes(16);
 export const subscription = { endpoint: "https://push.mock/send/device1", p256dh: ua.getPublicKey().toString("base64url"), auth: authSecret.toString("base64url") };
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const rss = (items) => `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>t</title>${items.map((i) => `<item><title>${esc(i.title)}</title><link>${esc(i.link)}</link><description>${esc(i.desc ?? "")}</description><pubDate>${new Date(Date.now() - (i.ageMin ?? 5) * 60000).toUTCString()}</pubDate>${i.img ? `<media:content url="${i.img}" medium="image"/>` : ""}${i.source ? `<source url="${i.sourceUrl}">${esc(i.source)}</source>` : ""}</item>`).join("")}</channel></rss>`;
+const rss = (items) => `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>t</title>${items.map((i) => `<item><title>${esc(i.title)}</title><link>${esc(i.link)}</link><description>${esc(i.desc ?? "")}</description><pubDate>${new Date(Date.now() - (i.ageMin ?? 5) * 60000).toUTCString()}</pubDate>${i.img ? `<media:content url="${i.img}" medium="image"/>` : ""}${i.source ? `<source url="${i.sourceUrl}">${esc(i.source)}</source>` : ""}${i.newsSource ? `<News:Source>${esc(i.newsSource)}</News:Source>` : ""}</item>`).join("")}</channel></rss>`;
 
 function feedFor(u) {
   const h = u.hostname, p = u.pathname + u.search;
@@ -49,21 +49,19 @@ function feedFor(u) {
       { title: "Storm brings travel disruption across northern Europe", link: "https://www.bbc.co.uk/news/articles/storm1", desc: "Flights cancelled.", ageMin: 60 },
     ]);
   }
-  if (h === "news.google.com") {
+  if (h === "www.bing.com") {
+    // Bing-Nachrichtensuche: Link ist eine Weiterleitung, der Anbieter steht in <News:Source>
+    const hit = (title, real, source, ageMin) => ({ title, link: `http://www.bing.com/news/apiclick.aspx?ref=FexRss&aid=&url=${encodeURIComponent(real)}&c=1&mkt=de-de`, desc: "", ageMin, newsSource: source });
     const q = u.searchParams.get("q") ?? "";
     if (/nvidia/i.test(q)) {
       return rss([
-        ...(breaking ? [{ title: "Nvidia: Huang tritt als Chef zurück - Handelsblatt", link: "https://news.google.com/rss/articles/NV1?oc=5", source: "Handelsblatt", sourceUrl: "https://www.handelsblatt.com", ageMin: 1 },
-          { title: "Nvidia-Chef Huang tritt überraschend zurück - tagesschau.de", link: "https://news.google.com/rss/articles/NV2?oc=5", source: "tagesschau.de", sourceUrl: "https://www.tagesschau.de", ageMin: 1 }] : []),
-        { title: "Analyst hebt Kursziel für Nvidia an - finanzen.net", link: "https://news.google.com/rss/articles/NV0?oc=5", source: "finanzen.net", sourceUrl: "https://www.finanzen.net", ageMin: 200 },
+        ...(breaking ? [hit("Nvidia: Huang tritt als Chef zurück", "https://www.handelsblatt.com/unternehmen/nvidia-huang/1.html", "Handelsblatt", 1),
+          hit("Nvidia-Chef Huang tritt überraschend zurück", "https://www.tagesschau.de/wirtschaft/nvidia-huang-100.html?ocid=bing", "tagesschau.de", 1)] : []),
+        hit("Analyst hebt Kursziel für Nvidia an", "https://www.finanzen.net/nachricht/aktien/nvidia-kursziel-1", "finanzen.net", 200),
       ]);
     }
-    if (/gta/i.test(q)) {
-      return rss([{ title: "GTA 6: Neuer Trailer zeigt Vice City - GameStar", link: "https://news.google.com/rss/articles/GTA1?oc=5", source: "GameStar", sourceUrl: "https://www.gamestar.de", ageMin: 300 }]);
-    }
-    if (/openai|kuenstliche|künstliche|"KI"/i.test(q)) {
-      return rss(second ? [{ title: "OpenAI stellt neues KI-Modell vor - heise online", link: "https://news.google.com/rss/articles/KI1?oc=5", source: "heise online", sourceUrl: "https://www.heise.de", ageMin: 1 }] : []);
-    }
+    if (/gta/i.test(q)) return rss([hit("GTA 6: Neuer Trailer zeigt Vice City", "https://www.gamestar.de/artikel/gta-6-trailer,1.html", "GameStar", 300)]);
+    if (/openai|kuenstliche|künstliche|"KI"/i.test(q)) return rss(second ? [hit("OpenAI stellt neues KI-Modell vor", "https://www.heise.de/news/openai-modell-1.html", "heise online", 1)] : []);
     return rss([]);
   }
   if (h === "feeds.finance.yahoo.com") {

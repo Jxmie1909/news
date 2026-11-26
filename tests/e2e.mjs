@@ -276,7 +276,7 @@ await shot("thema-bearbeiten");
 await page.locator(".sheet.show").last().locator(".sheet-foot .btn.primary").click();
 await page.waitForFunction(() => document.querySelectorAll(".sheet.show").length === 1);
 assert.match(sql("select array_to_string(keywords, ',') from topics where name='GTA 6'"), /Vice City/);
-assert.match(sql("select url from sources where name = 'Google News · GTA 6' and lang='de'"), /"GTA 6" OR "GTA VI"/);
+assert.match(sql("select url from sources where name = 'Suche · GTA 6' and lang='de'"), /"GTA 6" OR "GTA VI"/);
 // Aktie über die Suche hinzufügen
 await page.locator(".sheet.show .sheet-foot .btn", { hasText: "+ Aktie" }).click();
 await page.waitForSelector('.sheet.show input[type="search"]');

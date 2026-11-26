@@ -63,11 +63,13 @@ export function buildItem(src: SourceRow, raw: RawItem, nowMs = Date.now()): Ing
   let title = raw.title.replace(/^\s*\+\+\+\s*/, "").replace(/\s*\+\+\+\s*$/, "").replace(/\s+/g, " ").trim();
   if (title.length < 12) return null;
   title = truncate(title, 240);
+  // Suchtreffer und Google-News-Einträge nennen den eigentlichen Anbieter selbst
   const viaGoogle = src.kind === "gnews" || isGoogleNewsUrl(url);
   let publisher = raw.publisher || displayPublisher(src.name);
   let pkey = "";
   if (viaGoogle) {
     pkey = (raw.publisher_url ? publisherKeyFromUrl(raw.publisher_url) : "") || publisherKeyFromName(raw.publisher || "");
+    if (!raw.publisher && raw.publisher_url) publisher = pkey || publisher;
   } else if (src.kind === "sec") {
     pkey = "sec";
   } else if (src.kind === "bluesky") {
