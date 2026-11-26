@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title>Test</title>
+<item>
+  <title><![CDATA[Nvidia-Chef Huang tritt überraschend zurück]]></title>
+  <link>https://www.tagesschau.de/wirtschaft/nvidia-huang-100.html?utm_source=rss</link>
+  <description><![CDATA[<p>Der Chef des Chipkonzerns <b>Nvidia</b> gibt sein Amt ab. Die Aktie f&auml;llt nachb&ouml;rslich deutlich.</p><img src="https://images.tagesschau.de/a.jpg" />]]></description>
+  <pubDate>__NOW_RFC__</pubDate>
+  <guid>abc</guid>
+</item>
+<item>
+  <title>Bundestag beschlie&#223;t Rentenpaket &amp; mehr</title>
+  <link>https://www.tagesschau.de/inland/rente-102.html</link>
+  <description>Der Bundestag hat das Rentenpaket verabschiedet.</description>
+  <media:content url="https://images.tagesschau.de/b.jpg" medium="image"/>
+  <dc:date>__NOW_ISO__</dc:date>
+</item>
+<item><title>Kurz</title><link>https://x.de/1</link></item>
+</channel></rss>

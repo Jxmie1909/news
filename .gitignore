@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+supabase/.temp/
+supabase/.branches/
+*.log
+tests/shots/
+news-sicherung.zip
+vorschau/
