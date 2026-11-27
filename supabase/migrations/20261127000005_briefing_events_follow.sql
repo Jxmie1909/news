@@ -223,16 +223,25 @@ $$;
 -- Stoff für das Briefing: das Wichtigste aus allen Bereichen, jedes Ereignis einmal
 create or replace function public.briefing_material(p_since timestamptz, p_limit int default 70) returns jsonb
 language sql stable security definer set search_path = '' as $$
+  -- Zwei Töpfe: (1) worüber die meisten Medien berichten – das objektiv Große, egal ob eigenes Thema;
+  -- (2) das Wichtigste zu den eigenen Themen.
+  with base as (
+    select st.* from public.stories st
+     where st.kind = 'news' and st.tier >= 1 and st.dup_of is null and st.sort_at > p_since and length(st.title) > 20
+  ), welt as (
+    select id from base where source_count >= 3
+     order by source_count desc, importance desc limit greatest(10, (p_limit * 0.6)::int)
+  ), mein as (
+    select id from base where tier >= 2 and id not in (select id from welt)
+     order by (importance + least(source_count, 6) * 5 + case when tier >= 3 then 15 else 0 end) desc
+     limit greatest(8, p_limit - (select count(*) from welt)::int)
+  )
   select jsonb_build_object(
     'stories', (select coalesce(jsonb_agg(jsonb_build_object(
         'id', x.id, 'titel', coalesce(nullif(x.title_de, ''), x.title), 'text', left(coalesce(nullif(x.summary_ai, ''), x.summary, ''), 380),
-        'quelle', x.source_name, 'quellen', x.source_count, 'bereich', x.category, 'wichtigkeit', round(x.importance::numeric),
-        'mein_thema', cardinality(x.matched) > 0, 'zeit', x.sort_at)), '[]'::jsonb)
-      from (select * from public.stories st
-             where st.kind = 'news' and st.tier >= 1 and st.dup_of is null and st.sort_at > p_since
-               and length(st.title) > 20
-             order by (st.importance + least(st.source_count, 6) * 7 + case when st.tier >= 2 then 12 else 0 end) desc
-             limit p_limit) x),
+        'quelle', x.source_name, 'quellen', x.source_count, 'wichtigkeit', round(x.importance::numeric),
+        'mein_thema', x.tier >= 2, 'zeit', x.sort_at) order by x.source_count desc, x.importance desc), '[]'::jsonb)
+      from base x where x.id in (select id from welt union all select id from mein)),
     'termine', (select coalesce(jsonb_agg(jsonb_build_object('tag', e.day, 'was', e.title) order by e.day), '[]'::jsonb)
                   from (select * from public.events where day >= current_date and day <= current_date + 7 order by day, importance desc limit 10) e),
     'last_key', (select last_briefing_key from private.state)

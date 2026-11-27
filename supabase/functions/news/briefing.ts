@@ -20,13 +20,15 @@ const SYSTEM = `Du schreibst für eine einzelne Person ein Nachrichten-Briefing 
 Aufbau:
 - "titel": kurz, z. B. "Dein Morgen-Briefing" – wird vorgegeben, übernimm ihn.
 - "einleitung": EIN Satz, der sagt, was den Zeitraum geprägt hat.
-- "abschnitte": 3 bis 5 Abschnitte. Jede "ueberschrift" beginnt mit einem passenden Emoji, z. B. "🌍 Weltpolitik & Geopolitik", "⚔️ Konflikte & Sicherheit", "🇩🇪 Deutschland", "📈 Wirtschaft & Börse", "💻 Tech & KI", "🔬 Wissenschaft & Kultur", "⭐ Deine Themen". Wähle die Abschnitte nach dem, was wirklich passiert ist.
+- "abschnitte": 4 bis 5 Abschnitte (nur wenn das Material wirklich dünn ist, weniger). Jede "ueberschrift" beginnt mit einem passenden Emoji, z. B. "🌍 Weltpolitik & Geopolitik", "⚔️ Konflikte & Sicherheit", "🇩🇪 Deutschland", "📈 Wirtschaft & Börse", "💻 Tech & KI", "🔬 Wissenschaft & Kultur", "⭐ Deine Themen". Wähle die Abschnitte nach dem, was wirklich passiert ist.
 - Je Abschnitt 1 bis 4 "punkte". Insgesamt 8 bis 14 Punkte (Wochenrückblick: 10 bis 16).
 - Jeder Punkt: "titel" = prägnantes Stichwort zum Ereignis (3 bis 7 Wörter, kein Satz). "text" = 2 bis 4 dichte Sätze: Was ist passiert, wer ist beteiligt, konkrete Zahlen, Namen und Daten, und was es bedeutet oder wie es weitergeht. "i" = Nummer der wichtigsten zugrunde liegenden Meldung.
 
 Auswahl:
-- Nimm das, was objektiv am wichtigsten war, aus ALLEN Bereichen – auch wenn es nicht zu den Themen der Person gehört: große Politik, Konflikte, Gerichtsurteile, Wirtschaft, Wissenschaft, bemerkenswerte Kultur- und Weltraummeldungen.
-- Dazu das Wichtigste zu den eigenen Themen und Aktien der Person.
+- Ziel ist ein breites Bild der Welt. Nimm das, was objektiv am wichtigsten war, aus ALLEN Bereichen – auch wenn es nicht zu den Themen der Person gehört: große Politik im In- und Ausland, Kriege und Konflikte, Wahlen, Gerichtsurteile, Wirtschaft, Wissenschaft, bemerkenswerte Kultur- und Weltraummeldungen.
+- "quellen" ist die Zahl der Medien, die über das Ereignis berichten: Viele Quellen bedeuten ein objektiv großes Ereignis. Solche Ereignisse gehören hinein.
+- Weltpolitik/Konflikte und Deutschland bekommen fast immer je einen eigenen Abschnitt. Höchstens ein Drittel der Punkte darf aus Börse und einzelnen Unternehmen bestehen.
+- Dazu das Wichtigste zu den eigenen Themen und Aktien der Person ("mein_thema": true).
 - Jedes Ereignis nur EINMAL. Fasse mehrere Meldungen zum selben Ereignis in einem Punkt zusammen.
 - Keine Meinungsstücke, Ratgeber, Rabatte, Promi-Klatsch, Liveticker, Nachrufe auf wenig bekannte Personen.
 - Lieber weniger, dafür gehaltvolle Punkte.
@@ -76,7 +78,7 @@ export async function writeBriefing(
     vorlieben: truncate(cfg.settings.profile_text ?? "", 500),
     termine: mat?.termine ?? [],
     // deno-lint-ignore no-explicit-any
-    meldungen: stories.map((s: any, i: number) => ({ i, titel: truncate(s.titel, 160), text: truncate(s.text ?? "", 330), quelle: s.quelle, quellen: s.quellen, bereich: s.bereich ?? "", mein_thema: s.mein_thema })),
+    meldungen: stories.map((s: any, i: number) => ({ i, titel: truncate(s.titel, 160), text: truncate(s.text ?? "", 330), quelle: s.quelle, quellen: s.quellen, mein_thema: s.mein_thema })),
   });
   const r = await xfetch(`${BASE}/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
