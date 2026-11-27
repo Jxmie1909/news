@@ -328,6 +328,18 @@ await btn("Anmelden").click();
 await page.waitForSelector(".tabbar");
 await page.waitForSelector(".lead");
 
+step("Anmeldung bleibt erhalten, auch wenn das Gerät die Sitzung verliert");
+await page.reload();
+await page.waitForSelector(".tabbar");
+await page.evaluate(() => localStorage.removeItem("news.auth")); // Sitzung weg, gemerkte Zugangsdaten noch da
+await page.reload();
+await page.waitForSelector(".tabbar");
+await page.waitForSelector(".lead");
+await page.evaluate(() => { localStorage.removeItem("news.auth"); localStorage.removeItem("news.login"); }); // nur noch das Cookie
+await page.reload();
+await page.waitForSelector(".tabbar");
+assert.equal(await page.locator(".auth").count(), 0);
+
 step("Direkt zu einer Meldung (wie nach Tipp auf einen Push)");
 const sid = sql("select id from stories where pushed_at is not null or tier = 3 order by id limit 1");
 await page.goto(APP + "#/story/" + sid); // App läuft schon

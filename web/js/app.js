@@ -1,5 +1,5 @@
 // Start der App: Anmeldung, Reiter (Heute / Ticker / Gemerkt / Profil), Aktualisieren.
-import { fn, rpc, sb, updateSettings } from "./api.js";
+import { ensureSession, fn, forget, remember, rpc, sb, updateSettings } from "./api.js";
 import { APP_VERSION } from "./config.js";
 import { ago, busy, clear, closeAllSheets, debounce, h, icon, isIOS, isStandalone, longDate, openSheet, secondsAgo, sheetCount, store, toast } from "./lib.js";
 import { openInterestCheck, openOnboarding } from "./onboarding.js";
@@ -23,11 +23,9 @@ async function start() {
       else if (S.boot) { setTab("heute"); refreshToday(true); }
     }
   });
-  let session = null;
-  try {
-    session = (await sb.auth.getSession()).data.session;
-  } catch { /* weiter ohne */ }
-  if (!session) return showAuth();
+  const state = await ensureSession();
+  if (state === "none") return showAuth();
+  if (state === "offline") return showFatal("Gerade keine Verbindung. Deine Anmeldung bleibt erhalten.");
   await enter();
 }
 
@@ -35,10 +33,8 @@ async function enter() {
   try {
     await loadBoot();
   } catch (e) {
-    if (/anmelden|forbidden/i.test(e.message) || e.status === 42501) {
-      await sb.auth.signOut().catch(() => {});
-      return showAuth();
-    }
+    // Nur zur Anmeldung zurück, wenn wirklich keine Sitzung mehr zu bekommen ist; nie von selbst abmelden
+    if ((/anmelden|forbidden/i.test(e.message) || e.status === 42501) && (await ensureSession()) === "none") return showAuth();
     return showFatal(e.message);
   }
   const site = location.origin + location.pathname.replace(/index\.html$/, "");
@@ -86,6 +82,7 @@ async function showAuth() {
       const { error } = await sb.auth.signInWithPassword({ email: em, password: pw });
       if (error) throw new Error(/invalid login/i.test(error.message) ? "E-Mail oder Passwort stimmt nicht." : error.message);
       store.set("email", em);
+      remember(em, pw);
       await enter();
     } catch (e2) {
       err.textContent = e2.message;
@@ -165,7 +162,8 @@ function setTab(id) {
 }
 
 async function logout() {
-  await sb.auth.signOut().catch(() => {});
+  forget();
+  await sb.auth.signOut({ scope: "local" }).catch(() => {});
   S.boot = null; S.today = null; S.saved = null; S.ticker.items = [];
   showAuth();
 }
