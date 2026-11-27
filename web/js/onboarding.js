@@ -360,7 +360,7 @@ export function openOnboarding({ onDone, restart = false } = {}) {
 
     // ----- 7: Ruhezeiten, Limit, Digest -----
     rhythmus(el) {
-      clear(el, head(7, "Wann soll Ruhe sein?", "Lege fest, wann nichts stören darf und wie viele Pushes pro Tag höchstens kommen."), rhythmControls());
+      clear(el, head(7, "Wann soll Ruhe sein?", "Lege fest, wann nichts stören darf und wann dein Digest kommt."), rhythmControls());
       setFoot(nextBtn());
     },
 
@@ -425,7 +425,6 @@ export function openOnboarding({ onDone, restart = false } = {}) {
           h("div", { class: "kv stack" }, h("span", null, "🟡 Wichtig"), h("span", null, names(imp))),
           h("div", { class: "kv stack" }, h("span", null, "⚪ Nur in der App"), h("span", null, names(app))),
           h("div", { class: "kv" }, h("span", null, "Ruhezeit"), h("span", null, s.quiet_enabled ? `${s.quiet_start}–${s.quiet_end} Uhr` : "aus")),
-          h("div", { class: "kv" }, h("span", null, "Höchstens pro Tag"), h("span", null, `${s.push_max_per_day} Pushes`)),
           h("div", { class: "kv" }, h("span", null, "KI"), h("span", null, s.has_gemini_key ? "verbunden" : "nicht verbunden"))),
         h("p", { class: "help", style: { marginTop: "12px" } }, "Alles lässt sich später im Reiter „Profil“ ändern. Die ersten Meldungen erscheinen in wenigen Minuten."));
       setFoot(nextBtn("Fertig – zu meinen News", async () => {
@@ -463,15 +462,13 @@ export function openOnboarding({ onDone, restart = false } = {}) {
   go(0);
 }
 
-/** Bedienelemente für Ruhezeit, Tageslimit und Digest (auch im Profil verwendet). */
+/** Bedienelemente für Ruhezeit und Digest (auch im Profil verwendet). */
 export function rhythmControls() {
   const root = h("div");
   const save = async (patch) => { try { await updateSettings(patch); Object.assign(S.boot.settings, patch); } catch (e) { toast(e.message); } };
   const draw = () => {
     const s = settings();
     const time = (val, onch) => h("input", { class: "input", type: "time", value: val, onchange: (e) => onch(e.target.value || val) });
-    const maxB = h("b", null, String(s.push_max_per_day));
-    const step = (d) => { const v = Math.max(0, Math.min(50, S.boot.settings.push_max_per_day + d)); maxB.textContent = String(v); save({ push_max_per_day: v }); };
     const digestTimes = h("div", { class: "chips" });
     const drawDigest = () => clear(digestTimes,
       (S.boot.settings.digest_times ?? []).map((t) => h("button", { type: "button", class: "chip small on", onclick: () => { const next = S.boot.settings.digest_times.filter((x) => x !== t); save({ digest_times: next }).then(drawDigest); } }, `${t} Uhr`, h("span", { class: "rm" }, "×"))),
@@ -490,9 +487,6 @@ export function rhythmControls() {
         h("div", { class: "row" }, h("span", { class: "e" }, "🌙"), h("div", { class: "t" }, h("strong", null, "Ruhezeit"), h("small", null, "In dieser Zeit kommt kein Push.")), switchEl(s.quiet_enabled, (v) => save({ quiet_enabled: v }).then(draw))),
         s.quiet_enabled ? h("div", { class: "row" }, h("div", { class: "t" }, h("strong", null, "Von – bis")), time(s.quiet_start, (v) => save({ quiet_start: v })), h("span", { class: "v" }, "–"), time(s.quiet_end, (v) => save({ quiet_end: v }))) : null,
         s.quiet_enabled ? h("div", { class: "row" }, h("div", { class: "t" }, h("strong", null, "Aktien dürfen stören"), h("small", null, "Pushes zu deinen Aktien kommen auch in der Ruhezeit (US-Börse schließt um 22 Uhr, Meldungen kommen oft danach).")), switchEl(s.quiet_allow_stocks, (v) => save({ quiet_allow_stocks: v }))) : null),
-      h("div", { class: "group" },
-        h("div", { class: "row" }, h("span", { class: "e" }, "🧮"), h("div", { class: "t" }, h("strong", null, "Höchstens pro Tag"), h("small", null, "Ganz große Ereignisse kommen trotzdem durch.")),
-          h("div", { class: "stepper" }, h("button", { type: "button", "aria-label": "weniger", onclick: () => step(-1) }, "−"), maxB, h("button", { type: "button", "aria-label": "mehr", onclick: () => step(1) }, "+")))),
       h("div", { class: "group" },
         h("div", { class: "row" }, h("span", { class: "e" }, "🗞️"), h("div", { class: "t" }, h("strong", null, "Digest"), h("small", null, "Eine ruhige Zusammenfassung zu festen Zeiten.")), switchEl(s.digest_enabled, (v) => save({ digest_enabled: v }).then(draw))),
         s.digest_enabled ? h("div", { class: "row col" }, digestTimes) : null));

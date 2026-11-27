@@ -140,8 +140,7 @@ function pushAllowed(cfg: Compiled, state: TickState, domain: string, importance
   if (state.devices === 0 && !s.ntfy_enabled) return "kein Gerät angemeldet";
   // Ruhezeit gilt ohne Ausnahme (außer Aktien, wenn ausdrücklich erlaubt)
   if (inQuietHours(s) && !(domain === "stocks" && s.quiet_allow_stocks)) return "Ruhezeit";
-  // Tageslimit: ganz große Ereignisse kommen trotzdem durch, außer das Limit steht auf 0
-  if (state.pushes_today >= s.push_max_per_day && (s.push_max_per_day === 0 || importance < 92)) return "Tageslimit erreicht";
+
   return null;
 }
 
@@ -264,12 +263,12 @@ async function scoreAndApply(cfg: Compiled, state: TickState, affected: Story[],
     if (cands.length) {
       // Dasselbe Ereignis nicht doppelt melden (z. B. einmal deutsch, einmal englisch)
       const { data: recentRows } = await admin.from("stories").select("id,matched,event,tokens,pushed_at")
-        .gt("pushed_at", new Date(nowMs - 90 * 60_000).toISOString()).eq("kind", "news");
+        .gt("pushed_at", new Date(nowMs - 120 * 60_000).toISOString()).eq("kind", "news");
       const recent: { id: number; matched: string[]; event: string | null; tokens: string[]; pushed_at: string }[] = recentRows ?? [];
       for (const v of cands) {
         const st = byId.get(v.id)!;
         if (recent.some((r) => r.id !== st.id && sameEvent(r, st, v))) continue;
-        // Nicht dasselbe Thema im Dauerfeuer: höchstens ein Push je Thema in 90 Minuten, außer bei sehr Wichtigem
+        // Nicht dasselbe Thema im Dauerfeuer: höchstens ein Push je Thema in zwei Stunden, außer bei sehr Wichtigem
         if (v.pushTopic && v.importance < 80 && recent.some((r) => (r.matched ?? []).includes(v.pushTopic!.id))) continue;
         // Insgesamt höchstens 3 Pushes pro Stunde, außer bei sehr Wichtigem
         const lastHour = recent.filter((r) => nowMs - Date.parse(r.pushed_at) < 60 * 60_000).length;

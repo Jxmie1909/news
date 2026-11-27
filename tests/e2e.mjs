@@ -151,14 +151,11 @@ await page.waitForSelector(".ob .kv");
 await shot("push-grenze-ergebnis");
 const thr = sql("select thr_stocks || '|' || thr_topics || '|' || thr_world from settings").split("|").map(Number);
 console.log("    Schwellen:", thr.join(" / "));
-assert.ok(thr[0] >= 58 && thr[0] <= 66 && thr[1] >= 58 && thr[1] <= 66 && thr[2] === 72, "Schwellen liegen zwischen Stufe 3 und 4");
+assert.ok(thr[0] >= 58 && thr[0] <= 66 && thr[1] >= 58 && thr[1] <= 66 && thr[2] === 75, "Schwellen liegen zwischen Stufe 3 und 4");
 await btn("Weiter").click();
 
 step("Schritt 7: Ruhezeiten");
-await page.waitForSelector(".stepper");
-await page.locator(".stepper button", { hasText: "+" }).click();
-await page.waitForTimeout(300);
-assert.equal(sql("select push_max_per_day from settings"), "9");
+await page.waitForSelector(".switch");
 await shot("ruhezeiten");
 await noOverflow("Ruhezeiten");
 await btn("Weiter").click();
@@ -236,6 +233,29 @@ await shot("neue-meldungen");
 await page.locator(".pill.show").click();
 await page.getByText("OpenAI stellt neues KI-Modell vor").first().waitFor();
 
+step("Assistent: erklärt und stellt den Algorithmus um");
+await page.locator(".fab").click();
+await page.waitForSelector(".sheet.show .chat-hello");
+await shot("assistent-start");
+await page.fill(".sheet.show .chat-input", "Ich bekomme zu viele Pushes zu GTA 6");
+await page.locator(".sheet.show .chat-send").click();
+await page.waitForSelector(".sheet.show .did div");
+assert.match(await page.locator(".sheet.show .did").textContent(), /GTA 6.*Wichtig/);
+assert.equal(sql("select priority from topics where name='GTA 6'"), "2");
+await page.fill(".sheet.show .chat-input", "Bitte keine Nachrufe mehr");
+await page.locator(".sheet.show .chat-input").press("Enter");
+await page.waitForFunction(() => document.querySelectorAll(".sheet.show .did").length === 2);
+assert.match(sql("select profile_text from settings"), /Nachrufe interessieren mich nicht/);
+assert.match(sql("select array_to_string(muted, ',') from settings"), /horoskop/);
+assert.equal(sql("select neg from term_weights where term = 'nachru'"), "4");
+await page.fill(".sheet.show .chat-input", "Was war heute wichtig?");
+await page.locator(".sheet.show .chat-send").click();
+await page.getByText("Rücktritt des Nvidia-Chefs").waitFor();
+await shot("assistent-gespraech");
+await page.locator(".sheet.show .close").click();
+await page.waitForSelector(".sheet", { state: "detached" });
+sql("update topics set priority = 3 where name = 'GTA 6'");
+
 step("Ticker");
 await page.locator('.tabbar button[data-tab="ticker"]').click();
 await page.waitForSelector(".story");
@@ -297,7 +317,7 @@ await page.waitForSelector(".sheet", { state: "detached" });
 for (const [label, wait, name] of [
   ["Bereiche & Sprachen", ".bigchips", "bereiche-sprachen"],
   ["Push", "input[type=range]", "push-einstellungen"],
-  ["Ruhezeit, Limit", ".stepper", "ruhezeit"],
+  ["Ruhezeit & Digest", ".switch", "ruhezeit"],
   ["Kursalarm", ".stepper", "kursalarm"],
   ["Push-Verlauf", ".sheet-body", "push-verlauf"],
   ["KI-Einordnung", "textarea", "ki"],

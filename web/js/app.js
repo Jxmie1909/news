@@ -1,5 +1,6 @@
 // Start der App: Anmeldung, Reiter (Heute / Ticker / Gemerkt / Profil), Aktualisieren.
 import { ensureSession, fn, forget, remember, rpc, sb, updateSettings } from "./api.js";
+import { openAssistant } from "./assistant.js";
 import { APP_VERSION } from "./config.js";
 import { ago, busy, clear, closeAllSheets, debounce, h, icon, isIOS, isStandalone, longDate, openSheet, secondsAgo, sheetCount, store, toast } from "./lib.js";
 import { openInterestCheck, openOnboarding } from "./onboarding.js";
@@ -9,7 +10,7 @@ import { loadBoot, on, S, settings, topics } from "./state.js";
 import { leadCard, openStory, skeleton, storyRow } from "./stories.js";
 
 const view = document.getElementById("view");
-let tabbar = null, pill = null, ptr = null;
+let tabbar = null, pill = null, ptr = null, fab = null;
 let statusTimer = null, pollTimer = null;
 
 // ---------------------------------------------------------------------------
@@ -115,8 +116,8 @@ const TABS = [
 ];
 
 function destroyShell() {
-  tabbar?.remove(); pill?.remove(); ptr?.remove();
-  tabbar = pill = ptr = null;
+  tabbar?.remove(); pill?.remove(); ptr?.remove(); fab?.remove();
+  tabbar = pill = ptr = fab = null;
   clearInterval(statusTimer); clearInterval(pollTimer);
   closeAllSheets();
 }
@@ -127,7 +128,8 @@ function showShell() {
     h("button", { type: "button", dataset: { tab: t.id }, onclick: () => { if (S.tab === t.id) window.scrollTo({ top: 0, behavior: "smooth" }); else setTab(t.id); } }, icon(t.icon), t.label))));
   pill = h("button", { class: "pill", type: "button", onclick: () => { hidePill(); setTab("heute"); refreshToday(true); window.scrollTo({ top: 0, behavior: "smooth" }); } });
   ptr = h("div", { class: "ptr", "aria-hidden": "true" }, h("span", { class: "arrow" }, "↓"), h("span", { class: "spin" }));
-  document.body.append(tabbar, pill, ptr);
+  fab = h("button", { class: "fab", type: "button", "aria-label": "Assistent öffnen", onclick: () => openAssistant() }, "✨");
+  document.body.append(tabbar, pill, ptr, fab);
   setupPullToRefresh();
   pollTimer = setInterval(poll, 30_000);
   statusTimer = setInterval(updateStatusLine, 5_000);

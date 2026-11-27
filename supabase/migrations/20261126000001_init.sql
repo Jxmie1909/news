@@ -474,9 +474,9 @@ language plpgsql set search_path = '' as $$
 begin
   new.updated_at := now();
   if cardinality(new.languages) = 0 then new.languages := '{de}'; end if;
-  new.thr_stocks := greatest(45, least(98, new.thr_stocks));
-  new.thr_topics := greatest(45, least(98, new.thr_topics));
-  new.thr_world := greatest(72, least(99, new.thr_world));
+  new.thr_stocks := greatest(50, least(98, new.thr_stocks));
+  new.thr_topics := greatest(50, least(98, new.thr_topics));
+  new.thr_world := greatest(75, least(99, new.thr_world));
   new.push_max_per_day := greatest(0, least(100, new.push_max_per_day));
   new.muted := array(select distinct lower(trim(k)) from unnest(new.muted) k where trim(k) <> '');
   -- nur der Dienst darf dieses Kennzeichen setzen

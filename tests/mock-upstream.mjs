@@ -93,6 +93,18 @@ async function gemini(u, req, body) {
   if (state.geminiMode === "quota") return [429, JSON.stringify({ error: { code: 429, message: "Quota exceeded", status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } })];
   if (u.pathname.endsWith("/models")) return [200, JSON.stringify({ models: [{ name: "models/gemini-flash-lite-latest", supportedGenerationMethods: ["generateContent"] }, { name: "models/gemini-2.5-pro", supportedGenerationMethods: ["generateContent"] }] })];
   const j = JSON.parse(body);
+  if (j.tools) {
+    // Assistent: erst ein Werkzeug aufrufen, nach dessen Ergebnis mit Text antworten
+    const last = j.contents.at(-1);
+    const answered = (last.parts ?? []).some((p) => p.functionResponse);
+    const ask = j.contents.filter((c) => c.role === "user" && c.parts?.[0]?.text).at(-1)?.parts[0].text ?? "";
+    let parts;
+    if (answered) parts = [{ text: "Erledigt: Zu GTA 6 bekommst du jetzt keine Pushes mehr, die Meldungen stehen aber weiter oben in der App." }];
+    else if (/zu viele pushes.*gta/i.test(ask)) parts = [{ functionCall: { name: "thema_aendern", args: { thema: "GTA 6", wichtigkeit: 2 } }, thoughtSignature: "sig-1" }];
+    else if (/nachrufe/i.test(ask)) parts = [{ functionCall: { name: "vorliebe_merken", args: { regel: "Nachrufe interessieren mich nicht.", weniger_davon: ["Nachruf"] } } }, { functionCall: { name: "stummschalten", args: { hinzu: ["Horoskop"] } } }];
+    else parts = [{ text: "Heute war vor allem der Rücktritt des Nvidia-Chefs wichtig." }];
+    return [200, JSON.stringify({ candidates: [{ content: { role: "model", parts }, finishReason: "STOP" }] })];
+  }
   const user = j.contents?.[0]?.parts?.[0]?.text ?? "";
   let out;
   if (user.includes('"meldungen"')) {

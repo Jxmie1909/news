@@ -65,7 +65,7 @@ function draw() {
     h("div", { class: "group-title" }, "Benachrichtigungen"),
     h("div", { class: "group" },
       row("🔔", "Push", "Geräte, Empfindlichkeit, ntfy", s.push_enabled ? "An" : "Aus", () => openPushSettings()),
-      row("🌙", "Ruhezeit, Limit & Digest", s.quiet_enabled ? `Ruhe ${s.quiet_start}–${s.quiet_end} · max. ${s.push_max_per_day} pro Tag` : `Keine Ruhezeit · max. ${s.push_max_per_day} pro Tag`, null, openRhythm),
+      row("🌙", "Ruhezeit & Digest", s.quiet_enabled ? `Ruhe ${s.quiet_start}–${s.quiet_end}` : "Keine Ruhezeit", null, openRhythm),
       row("📉", "Kursalarm", "Bei plötzlichen Kursbewegungen deiner Aktien", s.price_alerts ? `ab ${String(s.price_move_pct).replace(".", ",")} %` : "Aus", openPrices),
       row("📜", "Push-Verlauf", "Was gesendet wurde und warum", null, openPushLog)),
     h("div", { class: "group-title" }, "Technik"),
@@ -287,7 +287,7 @@ export function openPushSettings() {
       const rest = h("div");
       const drawRest = () => {
         const s = settings();
-        const slider = (label, key, min = 45) => {
+        const slider = (label, key, min = 50) => {
           const val = h("small", null, thresholdLabel(s[key]));
           const inp = h("input", { type: "range", min: String(min), max: "95", step: "1", value: String(s[key]), "aria-label": label });
           inp.addEventListener("input", () => (val.textContent = thresholdLabel(Number(inp.value))));
@@ -300,8 +300,8 @@ export function openPushSettings() {
             h("div", { class: "row" }, h("div", { class: "t" }, h("strong", null, "Push-Nachrichten senden"), h("small", null, "Hauptschalter für alle Geräte.")), switchEl(s.push_enabled, async (v) => { try { await updateSettings({ push_enabled: v }); await loadBoot(); drawRest(); } catch (e) { toast(e.message); } })),
             h("div", { class: "row" }, h("div", { class: "t" }, h("strong", null, "Auch große Weltereignisse"), h("small", null, "Push bei sehr wichtigen Nachrichten, die zu keinem deiner Themen gehören.")), switchEl(s.world_push, async (v) => { try { await updateSettings({ world_push: v }); await loadBoot(); } catch (e) { toast(e.message); } }))),
           h("div", { class: "group-title" }, "Wie schnell soll ein Push kommen?"),
-          h("div", { class: "group" }, slider("📈 Deine Aktien", "thr_stocks"), slider("⭐ Deine Push-Themen", "thr_topics"), slider("🌍 Weltgeschehen", "thr_world", 72)),
-          h("p", { class: "help" }, "Meinungen, Analystenstimmen und Gerüchte lösen nie einen Push aus. Pro Thema kommt höchstens ein Push in 90 Minuten und insgesamt höchstens drei pro Stunde – außer bei sehr wichtigen Ereignissen. Die App passt die Regler behutsam an, wenn du Pushes mit 👎 oder Meldungen mit 🔥 bewertest."),
+          h("div", { class: "group" }, slider("📈 Deine Aktien", "thr_stocks"), slider("⭐ Deine Push-Themen", "thr_topics"), slider("🌍 Weltgeschehen", "thr_world", 75)),
+          h("p", { class: "help" }, "Meinungen, Analystenstimmen und Gerüchte lösen nie einen Push aus. Pro Thema kommt höchstens ein Push in zwei Stunden und insgesamt höchstens drei pro Stunde – außer bei sehr wichtigen Ereignissen. Die App passt die Regler behutsam an, wenn du Pushes mit 👎 oder Meldungen mit 🔥 bewertest."),
           h("div", { class: "group-title" }, "Zweiter Zustellweg"), ntfyBox());
       };
       add(body, h("div", { class: "group-title", style: { marginTop: "6px" } }, "Dieses Gerät"), h("div", { style: { marginTop: "10px" } }, pushBox({ onChange: () => {} })), rest);
@@ -315,7 +315,7 @@ export function openInstallHelp() {
 }
 
 function openRhythm() {
-  openSheet({ title: "Ruhezeit, Limit & Digest", render: (body) => { add(body, rhythmControls()); }, onClose: () => loadBoot().catch(() => {}) });
+  openSheet({ title: "Ruhezeit & Digest", render: (body) => { add(body, rhythmControls()); }, onClose: () => loadBoot().catch(() => {}) });
 }
 
 function openPrices() {

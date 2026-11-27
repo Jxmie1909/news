@@ -336,7 +336,7 @@ export function analyze(st: Story, cfg: Compiled): Analysis {
 }
 
 const BASE_REL: Record<number, number> = { 3: 95, 2: 76, 1: 56 };
-export const PUSH_FLOOR = { stocks: 45, topics: 45, world: 72 };
+export const PUSH_FLOOR = { stocks: 50, topics: 50, world: 75 };
 
 export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerdict | null): Verdict {
   const s = cfg.settings;

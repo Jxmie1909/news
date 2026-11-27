@@ -273,7 +273,7 @@ assert.equal(t.alerts, 0);
 ok("Kein zweiter Alarm für dieselbe Bewegung");
 await mock({ price: "calm" });
 
-step("Ruhezeit und Tageslimit");
+step("Ruhezeit");
 await mock({ phase: 1 });
 sql("update stories set pushed_at = null, first_seen_at = now(), llm = null where title ilike '%Huang%'");
 const lp = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
@@ -293,11 +293,7 @@ const again = async (nonce) => {
 t = await again("a");
 assert.equal(t.pushed, 0, "in der Ruhezeit kein Push");
 ok("Ruhezeit hält Pushes zurück");
-await sb.from("settings").update({ quiet_enabled: false, push_max_per_day: 0 }).eq("id", true);
-t = await again("b");
-assert.equal(t.pushed, 0, "Tageslimit erreicht");
-ok("Tageslimit hält Pushes zurück");
-await sb.from("settings").update({ push_max_per_day: 20 }).eq("id", true);
+await sb.from("settings").update({ quiet_enabled: false }).eq("id", true);
 t = await again("c");
 assert.equal(t.pushed, 1, "danach wird gepusht: " + JSON.stringify(t));
 ok("Nach Aufheben wird wieder gepusht");

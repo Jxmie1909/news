@@ -3,6 +3,7 @@ import { admin, rpc } from "./db.ts";
 import { fetchSource, type SourceRow } from "./feeds.ts";
 import { xfetch } from "./http.ts";
 import { LlmError, suggestTopics, suggestTopicsFallback, testKey } from "./llm.ts";
+import { runAssistant } from "./assistant.ts";
 import { deliver, ensureVapid } from "./push.ts";
 import { loadConfig, rescoreAll, resetCache } from "./tick.ts";
 
@@ -139,6 +140,24 @@ export async function handleApi(action: string, body: any, req: Request): Promis
           }
         }
         return json({ topics: suggestTopicsFallback(text), ai: false });
+      }
+      case "assistant": {
+        const key = cfg.raw.secrets?.gemini_api_key;
+        if (!key) return json({ ok: false, error: "Der Assistent braucht die KI-Verbindung. Trage unter Profil → KI-Einordnung deinen Gemini-Schlüssel ein." });
+        const turns = (Array.isArray(body?.messages) ? body.messages : [])
+          // deno-lint-ignore no-explicit-any
+          .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && typeof m.text === "string" && m.text.trim())
+          // deno-lint-ignore no-explicit-any
+          .map((m: any) => ({ role: m.role, text: String(m.text) }));
+        if (!turns.length || turns[turns.length - 1].role !== "user") throw new HttpError(400, "Frage fehlt");
+        try {
+          const out = await runAssistant(key, cfg.settings.llm_model, cfg, turns, Number(body?.story_id) || null);
+          await rpc("service_llm_note", { p_calls: 1, p_ok: true });
+          if (out.actions.length) resetCache();
+          return json({ ok: true, ...out });
+        } catch (e) {
+          return json({ ok: false, error: friendlyLlmError(e) });
+        }
       }
       case "rescore": {
         // deno-lint-ignore no-explicit-any

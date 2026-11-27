@@ -138,6 +138,10 @@ export function openStory(id, preview = null) {
           s.summary_ai ? h("div", { class: "ai-note" }, "✨ Von der KI zusammengefasst – Einzelheiten im Originalartikel.") : null,
           s.url ? h("a", { class: "btn primary block", href: s.url, target: "_blank", rel: "noopener noreferrer", style: { marginTop: "14px" } }, s.kind === "price" ? "Kurs ansehen" : "Artikel öffnen", icon("ext")) : null,
           h("div", { class: "actions2" }, saveBtn, shareBtn),
+          s.kind !== "price" ? h("button", { class: "btn block", type: "button", style: { marginTop: "10px" }, onclick: async () => {
+            const { openAssistant } = await import("./assistant.js");
+            openAssistant({ story: { id: s.id, title: s.title } });
+          } }, "✨ Frag die KI dazu") : null,
           h("h4", null, "War das interessant?"),
           fbRow,
           arts.length > 1 ? [h("h4", null, `${arts.length} Quellen berichten`), h("div", { class: "srcs" }, arts.map((a) =>
