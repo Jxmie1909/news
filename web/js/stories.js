@@ -20,6 +20,7 @@ export function kicker(s, { isNew = false, time = true } = {}) {
   const parts = [];
   if (isNew) parts.push(h("span", { class: "new", title: "Neu seit deinem letzten Besuch" }));
   const t = s.topics?.[0];
+  if (s.update_of) parts.push(h("span", { class: "badge accent" }, "Neue Entwicklung"));
   if (t) parts.push(h("span", { class: "topic" }, `${t.emoji ? t.emoji + " " : ""}${t.name}`));
   else if (s.event && EVENT_LABELS[s.event]) parts.push(h("span", { class: "topic" }, EVENT_LABELS[s.event]));
   if (s.source) {
@@ -117,6 +118,15 @@ export function openStory(id, preview = null) {
           } catch (e) { toast(e.message); }
         } }, icon("saved"), s.saved ? "Gemerkt ✓" : "Merken");
 
+        const followBtn = s.kind !== "price" ? h("button", { class: "btn block" + (s.followed ? " accent" : ""), type: "button", style: { marginTop: "10px" }, onclick: async () => {
+          try {
+            s.followed = await rpc("toggle_follow", { p_id: s.id });
+            applyLocal(s.id, { followed: s.followed });
+            draw();
+            toast(s.followed ? "Du bleibst dran: Neue Entwicklungen dazu bekommst du gemeldet." : "Du verfolgst das nicht mehr.");
+          } catch (e) { toast(e.message); }
+        } }, s.followed ? "✓ Du bleibst dran" : "🔔 Dranbleiben") : null;
+
         const shareBtn = h("button", { class: "btn", type: "button", onclick: async () => {
           const url = s.url || location.href;
           try {
@@ -137,7 +147,14 @@ export function openStory(id, preview = null) {
           h("div", { class: "meta" }, [s.source, ago(s.at), s.sources > 1 ? `${s.sources} Quellen` : null].filter(Boolean).join(" · ")),
           deepBlock(s),
           s.url ? h("a", { class: "btn primary block", href: s.url, target: "_blank", rel: "noopener noreferrer", style: { marginTop: "14px" } }, s.kind === "price" ? "Kurs ansehen" : "Artikel öffnen", icon("ext")) : null,
+          s.updates?.length ? [h("h4", null, "Was seitdem passiert ist"), h("div", { class: "updates" }, s.updates.map((u) => {
+            const el = h("button", { class: "update", type: "button" }, h("small", null, ago(u.at)), h("strong", null, u.title), u.summary ? h("span", null, u.summary) : null);
+            el.addEventListener("click", () => openStory(u.id));
+            return el;
+          }))] : null,
+          s.update_of ? h("div", { class: "ai-note", style: { marginTop: "12px" } }, "Neue Entwicklung zu: " + s.update_of) : null,
           h("div", { class: "actions2" }, saveBtn, shareBtn),
+          followBtn,
           s.kind !== "price" ? h("button", { class: "btn block", type: "button", style: { marginTop: "10px" }, onclick: async () => {
             const { openAssistant } = await import("./assistant.js");
             openAssistant({ story: { id: s.id, title: s.title } });

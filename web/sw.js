@@ -50,6 +50,10 @@ self.addEventListener("push", (e) => {
     opts.tag = String(d.tag);
     opts.renotify = true;
   }
+  // Punkt am App-Symbol; die genaue Zahl setzt die App beim Öffnen
+  try {
+    if (d.k !== "test" && self.navigator.setAppBadge) self.navigator.setAppBadge().catch(() => {});
+  } catch { /* nicht überall verfügbar */ }
   e.waitUntil(self.registration.showNotification(d.t || "News", opts));
 });
 

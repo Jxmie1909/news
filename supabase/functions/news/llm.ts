@@ -118,6 +118,10 @@ Mehrere unabhängige Quellen sprechen für ein echtes Ereignis. Gerüchte und Me
 
 "doppelt": Unter "schon_gemeldet" stehen Ereignisse, die der Person bereits gezeigt wurden. Behandelt die Meldung DASSELBE Ereignis (nur andere Quelle, andere Sprache, andere Formulierung, kein wesentlicher neuer Fakt), gib dessen Nummer "n" an. Sonst -1. Gleiches Thema, aber neues Ereignis ist NICHT doppelt. Behandeln zwei Meldungen in "meldungen" dasselbe Ereignis, gib bei der zweiten den Wert -2 minus den Index "i" der ersten an (also -2 für i=0, -3 für i=1 …).
 
+"folgt": Unter "verfolgt" stehen Ereignisse, bei denen die Person ausdrücklich dranbleiben will. Meldet die Meldung eine NEUE Entwicklung zu einem davon (nicht bloß eine Wiederholung), gib dessen Nummer "n" an, sonst -1.
+
+"termin_datum" und "termin_text": Nennt die Meldung einen konkreten, bedeutenden Termin in der ZUKUNFT (Quartalszahlen am …, Wahl am …, Release am …, Zinsentscheid am …, Gipfel am …, Gerichtsurteil am …), dann das Datum als JJJJ-MM-TT und eine kurze Beschreibung (höchstens 70 Zeichen, z. B. "Nvidia legt Quartalszahlen vor"). Nur bei einem eindeutigen Datum; sonst beide leer lassen. Heute ist HEUTE_DATUM.
+
 "event": eines von leadership, election, death, war, disaster, ma, market_move, earnings, legal, product, analyst, other.
 
 "titel": Schlagzeile auf Deutsch, sachlich, höchstens 95 Zeichen. Deutsche Schlagzeilen unverändert übernehmen, englische übersetzen. Eigennamen bleiben.
@@ -134,6 +138,9 @@ const SCORE_SCHEMA = {
       relevance: { type: "INTEGER" },
       neuigkeit: { type: "INTEGER" },
       doppelt: { type: "INTEGER" },
+      folgt: { type: "INTEGER" },
+      termin_datum: { type: "STRING" },
+      termin_text: { type: "STRING" },
       event: { type: "STRING" },
       titel: { type: "STRING" },
       summary: { type: "STRING" },
@@ -158,7 +165,7 @@ export interface Reported {
   title: string;
 }
 
-export async function scoreStories(key: string, model: string, cfg: Compiled, stories: Story[], reported: Reported[] = []): Promise<Map<number, LlmVerdict>> {
+export async function scoreStories(key: string, model: string, cfg: Compiled, stories: Story[], reported: Reported[] = [], followed: Reported[] = []): Promise<Map<number, LlmVerdict>> {
   const items = stories.map((s, i) => ({
     i,
     titel: truncate(s.title, 220),
@@ -169,8 +176,10 @@ export async function scoreStories(key: string, model: string, cfg: Compiled, st
   }));
   const ownIds = new Set(stories.map((s) => s.id));
   const known = reported.filter((r) => !ownIds.has(r.id)).slice(0, 30);
-  const user = JSON.stringify({ profil: profileForPrompt(cfg), schon_gemeldet: known.map((r, n) => ({ n, titel: truncate(r.title, 140) })), meldungen: items });
-  const out = await generate(key, model, SCORE_SYSTEM, user, SCORE_SCHEMA, 500 + 260 * stories.length, 15000);
+  const watch = followed.filter((r) => !ownIds.has(r.id)).slice(0, 12);
+  const today = new Date().toISOString().slice(0, 10);
+  const user = JSON.stringify({ profil: profileForPrompt(cfg), schon_gemeldet: known.map((r, n) => ({ n, titel: truncate(r.title, 140) })), verfolgt: watch.map((r, n) => ({ n, titel: truncate(r.title, 140) })), meldungen: items });
+  const out = await generate(key, model, SCORE_SYSTEM.replace("HEUTE_DATUM", today), user, SCORE_SCHEMA, 500 + 300 * stories.length, 15000);
   const map = new Map<number, LlmVerdict>();
   if (!Array.isArray(out)) throw new LlmError("Antwort hat falsches Format", 200);
   for (const r of out) {
@@ -187,11 +196,18 @@ export async function scoreStories(key: string, model: string, cfg: Compiled, st
       if (first && first.id !== st.id && Number(r.i) > -d - 2) dupOf = first.id;
     }
     const titel = typeof r.titel === "string" ? r.titel.trim() : "";
+    const f = Number(r.folgt);
+    const followOf = Number.isInteger(f) && f >= 0 && watch[f] && dupOf == null ? watch[f].id : null;
+    const td = typeof r.termin_datum === "string" ? r.termin_datum.trim() : "";
+    const tt = typeof r.termin_text === "string" ? r.termin_text.trim() : "";
+    const termin = /^\d{4}-\d{2}-\d{2}$/.test(td) && tt.length >= 6 && td > today && td <= new Date(Date.now() + 200 * 86400_000).toISOString().slice(0, 10) ? { day: td, title: truncate(tt, 90) } : null;
     map.set(st.id, {
       importance: Math.max(0, Math.min(100, Math.round(imp))),
       relevance: Math.max(0, Math.min(100, Math.round(rel))),
       novelty: Number.isFinite(nov) ? Math.max(0, Math.min(100, Math.round(nov))) : undefined,
       dup_of: dupOf,
+      follow_of: followOf,
+      termin,
       title_de: titel.length >= 8 && titel.length <= 160 && titel !== st.title ? titel : undefined,
       event: typeof r.event === "string" ? r.event.toLowerCase().trim() : undefined,
       summary: typeof r.summary === "string" ? truncate(r.summary.trim(), 360) : undefined,

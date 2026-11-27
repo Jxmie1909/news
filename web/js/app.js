@@ -204,6 +204,13 @@ export async function refreshToday() {
     if (S.boot?.status) S.boot.status.last_tick_at = data.last_tick_at;
     if (S.tab === "heute") drawToday();
     hidePill();
+    setBadge((data.new ?? []).filter((x) => !x.read).length);
+    // Gibt es noch kein aktuelles Briefing, einmal von selbst eines schreiben lassen
+    const age = data.briefing ? Date.now() - new Date(data.briefing.created_at).getTime() : Infinity;
+    if (age > 10 * 3600_000 && settings().has_gemini_key && !briefingBusy && !store.get("briefAuto." + new Date().toDateString() + (new Date().getHours() < 14 ? "a" : "b"), false)) {
+      store.set("briefAuto." + new Date().toDateString() + (new Date().getHours() < 14 ? "a" : "b"), true);
+      makeBriefing();
+    }
     setTimeout(() => rpc("mark_seen").catch(() => {}), 2500);
   } catch (e) {
     if (S.tab === "heute" && !S.today) clear(todayPage, header(), h("div", { class: "empty" }, h("div", { class: "big" }, "📡"), h("strong", null, "Konnte nicht laden"), e.message, h("div", { style: { marginTop: "16px" } }, h("button", { class: "btn", onclick: () => refreshToday() }, "Erneut versuchen"))));
@@ -216,6 +223,7 @@ function markAllRead() {
   if (ids.length) rpc("mark_read", { p_ids: ids }).catch(() => {});
   const now = new Date().toISOString();
   store.set("visit", { base: now, next: now, touched: Date.now() });
+  setBadge(0);
   refreshToday();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -303,6 +311,86 @@ function sinceText(iso) {
   return `seit ${d.toLocaleDateString("de-DE", { weekday: "long" })}`;
 }
 
+// ---------- Briefing ----------
+let briefingBusy = false;
+async function makeBriefing(kind = "tag") {
+  if (briefingBusy) return;
+  if (!settings().has_gemini_key) return toast("Für das Briefing brauchst du die KI-Verbindung (Profil → KI-Einordnung).", { ms: 5000 });
+  briefingBusy = true;
+  drawToday();
+  try {
+    const r = await fn("briefing", { kind });
+    if (!r.ok) throw new Error(r.error || "Briefing gerade nicht möglich.");
+    await refreshToday();
+  } catch (e) {
+    toast(e.message, { ms: 5000 });
+  }
+  briefingBusy = false;
+  drawToday();
+}
+
+function briefingBlock(b) {
+  if (briefingBusy) return h("div", { class: "brief" }, h("div", { class: "deep-loading" }, h("span", { class: "spin" }), "Die KI schreibt dein Briefing aus den wichtigsten Meldungen …"));
+  if (!b?.data?.abschnitte?.length) {
+    return h("div", { class: "brief empty-brief" },
+      h("strong", null, "Dein Briefing"),
+      h("p", null, "Das Wichtigste aus allen Bereichen, kurz und gegliedert – morgens und abends automatisch, oder jetzt sofort."),
+      h("button", { class: "btn small accent", type: "button", onclick: () => makeBriefing() }, "Jetzt schreiben lassen"));
+  }
+  const d = b.data;
+  const when = new Date(b.created_at);
+  const open = store.get("briefOpen", true);
+  const body = h("div", { class: "brief-body", hidden: !open },
+    d.einleitung ? h("p", { class: "brief-lede" }, d.einleitung) : null,
+    d.abschnitte.map((a) => h("section", null,
+      h("h3", null, a.ueberschrift),
+      h("ul", null, a.punkte.map((p) => {
+        const li = h("li", p.story_id ? { class: "tap", role: "button", tabindex: "0" } : null, h("strong", null, p.titel + ": "), p.text, p.story_id ? h("span", { class: "more" }, " Mehr ›") : null);
+        if (p.story_id) li.addEventListener("click", () => openStory(p.story_id));
+        return li;
+      })))),
+    d.steht_an?.length ? h("section", null, h("h3", null, "📅 Das steht an"), h("ul", null, d.steht_an.map((x) => h("li", null, x)))) : null,
+    h("div", { class: "brief-foot" },
+      h("span", null, "✨ Von der KI aus den gesammelten Meldungen geschrieben."),
+      h("button", { class: "linklike", type: "button", onclick: () => makeBriefing() }, "Neu schreiben"),
+      h("button", { class: "linklike", type: "button", onclick: () => makeBriefing("woche") }, "Wochenrückblick")));
+  const toggle = h("button", { class: "brief-head", type: "button", "aria-expanded": String(open), onclick: () => {
+    const now = body.hidden;
+    body.hidden = !now;
+    store.set("briefOpen", now);
+    toggle.setAttribute("aria-expanded", String(now));
+    toggle.querySelector(".chev").textContent = now ? "⌃" : "⌄";
+  } },
+    h("div", null, h("strong", null, d.titel || "Dein Briefing"), h("small", null, `${when.toLocaleDateString("de-DE", { weekday: "long" })}, ${when.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr`)),
+    h("span", { class: "chev" }, open ? "⌃" : "⌄"));
+  if (!b.read) rpc("briefing_read", { p_id: b.id }).catch(() => {});
+  return h("div", { class: "brief" }, toggle, body);
+}
+
+function eventsBlock(events) {
+  if (!events?.length) return null;
+  const fmt = (iso) => {
+    const d = new Date(iso + "T12:00:00");
+    const today = new Date(); today.setHours(12, 0, 0, 0);
+    const diff = Math.round((d - today) / 86400_000);
+    if (diff === 0) return "Heute";
+    if (diff === 1) return "Morgen";
+    return d.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
+  };
+  return [h("h2", { class: "sec" }, "Das steht an", h("span", { class: "count" }, "nächste 10 Tage")),
+    h("div", { class: "events" }, events.map((e) => {
+      const el = h(e.story_id ? "button" : "div", { class: "event", type: e.story_id ? "button" : null }, h("b", null, fmt(e.day)), h("span", null, e.title));
+      if (e.story_id) el.addEventListener("click", () => openStory(e.story_id));
+      return el;
+    }))];
+}
+
+function setBadge(n) {
+  try {
+    if (n > 0) navigator.setAppBadge?.(n); else navigator.clearAppBadge?.();
+  } catch { /* nicht überall verfügbar */ }
+}
+
 function drawToday() {
   if (!todayPage || S.tab !== "heute") return;
   const d = S.today;
@@ -314,7 +402,11 @@ function drawToday() {
   const fresh = collapseSame(d.new ?? []);
   const seen = d.seen ?? [];
   const notes = h("div");
-  const out = [header(), notes];
+  const out = [header(), notes, briefingBlock(d.briefing), eventsBlock(d.events)];
+  if (d.following?.length) {
+    out.push(h("h2", { class: "sec" }, "Du bleibst dran", h("span", { class: "count" }, String(d.following.length))));
+    out.push(h("div", null, d.following.map((s) => storyRow(s, { compact: true }))));
+  }
   if (fresh.length) {
     const top = fresh.filter((s) => s.tier === 3), rest = fresh.filter((s) => s.tier !== 3);
     out.push(h("h2", { class: "sec" }, "Neu für dich", h("span", { class: "count" }, `${fresh.length} · ${sinceText(d.since)}`)));

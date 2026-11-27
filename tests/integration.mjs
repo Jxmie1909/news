@@ -324,11 +324,11 @@ t = await tick();
 m = await mock();
 const dg = m.pushes.find((p) => p.data.k === "digest");
 assert.ok(dg, "Digest-Push erwartet");
-assert.match(dg.data.t, /^Dein Digest: \d+ wichtige Meldung/);
+assert.match(dg.data.t, /Briefing ist da$|Wochenrückblick ist da$/);
 assert.equal(m.ntfy.length, 1);
 assert.equal(m.ntfy[0].topic, boot.settings.ntfy_topic);
 assert.equal(m.ntfy[0].click, "https://beispiel.github.io/news/");
-ok(`Digest: ${dg.data.t}; zusätzlich über ntfy zugestellt`);
+ok(`${dg.data.t}; zusätzlich über ntfy zugestellt`);
 t = await tick();
 m = await mock();
 assert.equal(m.pushes.filter((p) => p.data.k === "digest").length, 1);
@@ -370,6 +370,51 @@ const deepReq = JSON.parse(JSON.parse(m.gemini.filter((g) => g.body.includes("we
 assert.ok(deepReq.artikel.length >= 1 && /Chiphersteller/.test(deepReq.artikel[0].text) && !/Impressum|Menü/.test(deepReq.artikel[0].text), "nur der Artikeltext, ohne Menü und Fußzeile");
 ok(`Ausführliche Zusammenfassung aus ${dp.body.deep.quellen} Originalartikeln, mit Folgen und Einschätzung; wird gespeichert`);
 sql("update stories set tier = 1 where title ilike 'Kommentar:%' or title ilike 'Sturmtief%'");
+
+step("Briefing, Termine und Dranbleiben");
+// Briefing auf Knopfdruck
+const br = await fn("briefing", {}, auth);
+assert.equal(br.body.ok, true, JSON.stringify(br.body));
+assert.equal(Number(sql("select count(*) from briefings")), 2, "eines zur eingestellten Zeit, eines auf Knopfdruck");
+assert.ok(br.body.data.abschnitte.length >= 2 && br.body.data.abschnitte[0].punkte[0].text.length > 40);
+let f3 = (await sb.rpc("feed_today", { p_since: new Date(Date.now() - 3600_000).toISOString() })).data;
+assert.equal(f3.briefing.id, br.body.id);
+const tapId = f3.briefing.data.abschnitte[0].punkte[0].story_id;
+assert.ok(tapId, "Punkt im Briefing führt zu einer Meldung");
+const tapDet = (await sb.rpc("story_detail", { p_id: tapId })).data;
+assert.ok(/Huang/.test(tapDet.title) && tapDet.articles.length >= 1);
+ok(`Briefing „${f3.briefing.data.titel}“ mit ${f3.briefing.data.abschnitte.length} Abschnitten; Antippen öffnet die ausführliche Meldung`);
+// Termine aus Meldungen
+const evs = f3.events;
+assert.ok(evs.length >= 1 && /OpenAI/.test(evs[0].title) && /^\d{4}-\d{2}-\d{2}$/.test(evs[0].day), JSON.stringify(evs));
+ok(`Terminvorschau: ${evs[0].day} – ${evs[0].title}`);
+// Dranbleiben: neue Entwicklung zu einem verfolgten Ereignis wird gemeldet und verknüpft
+const renteId = sql("select id from stories where title ilike '%Rentenpaket%' and dup_of is null order by id limit 1");
+assert.ok(renteId, "Ausgangsmeldung vorhanden");
+assert.equal((await sb.rpc("toggle_follow", { p_id: Number(renteId) })).data, true);
+await fetch(`${MOCK}/__reset`);
+await mock({ phase: 3 });
+allDue();
+sql("update private.state set llm_calls = 0, llm_paused_until = null; update settings set quiet_enabled = false where id");
+let upd = "";
+for (let i = 0; i < 25 && !upd; i++) {
+  await tick();
+  upd = sql(`select id from stories where follow_of = ${renteId} limit 1`);
+  if (!upd) await new Promise((r) => setTimeout(r, 2500));
+}
+assert.ok(upd, "neue Entwicklung wurde dem verfolgten Ereignis zugeordnet");
+m = await mock();
+const fp = m.pushes.find((p) => /Neue Entwicklung/.test(p.data.t + " " + (p.data.r ?? "") + " " + p.data.b));
+assert.ok(fp, "Push zur neuen Entwicklung: " + JSON.stringify(m.pushes.map((p) => p.data)));
+const rd = (await sb.rpc("story_detail", { p_id: Number(renteId) })).data;
+assert.ok(rd.followed && rd.updates.length === 1, JSON.stringify(rd.updates));
+f3 = (await sb.rpc("feed_today", { p_since: new Date(Date.now() - 3600_000).toISOString() })).data;
+assert.ok(f3.following.some((x) => x.id === Number(renteId)));
+ok(`Dranbleiben: „${rd.updates[0].title}“ als neue Entwicklung gemeldet und im Verlauf verknüpft`);
+assert.equal((await sb.rpc("toggle_follow", { p_id: Number(renteId) })).data, false);
+// Wächter und lernende Push-Auswahl laufen fehlerfrei
+sql("select private.tune_push(); select private.housekeeping()");
+ok("Push-Auswahl lernt aus Rückmeldungen; Aufräumen läuft");
 
 step("Status für die App");
 const st = (await sb.rpc("system_status")).data;

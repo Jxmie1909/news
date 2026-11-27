@@ -24,6 +24,7 @@ function feedFor(u) {
   if (h === "www.tagesschau.de" && p.startsWith("/index")) {
     return rss([
       ...(breaking ? [{ title: "Nvidia-Chef Huang tritt überraschend zurück", link: "https://www.tagesschau.de/wirtschaft/nvidia-huang-100.html", desc: "Jensen Huang gibt die Führung des Chipkonzerns ab. Die Aktie fällt nachbörslich.", ageMin: 1, img: "https://images.tagesschau.de/nvidia.jpg" }] : []),
+      ...(state.phase >= 3 ? [{ title: "Vermittlungsausschuss einigt sich: Rente kommt mit Änderungen", link: "https://www.tagesschau.de/inland/vermittlung-100.html", desc: "Die Länder setzen spätere Fristen durch. Die Einigung soll kommende Woche bestätigt werden.", ageMin: 1 }] : []),
       ...(second ? [{ title: "OpenAI stellt neues KI-Modell vor", link: "https://www.tagesschau.de/wirtschaft/openai-102.html", desc: "Das Unternehmen verspricht deutlich bessere Ergebnisse.", ageMin: 1 }] : []),
       { title: "Bundestag beschließt Rentenpaket nach langer Debatte", link: "https://www.tagesschau.de/inland/rente-100.html", desc: "Die Koalition hat das Rentenpaket verabschiedet.", ageMin: 40, img: "https://images.tagesschau.de/rente.jpg" },
       { title: "Sturmtief zieht über Norddeutschland hinweg", link: "https://www.tagesschau.de/inland/sturm-100.html", desc: "Der Wetterdienst warnt vor Orkanböen.", ageMin: 90 },
@@ -107,7 +108,17 @@ async function gemini(u, req, body) {
   }
   const user = j.contents?.[0]?.parts?.[0]?.text ?? "";
   let out;
-  if (user.includes('"meldungen"')) {
+  if (user.includes('"zeitraum"')) {
+    const req = JSON.parse(user);
+    const big = req.meldungen.find((m) => /Huang/.test(m.titel)) ?? req.meldungen[0];
+    const other = req.meldungen.find((m) => m !== big) ?? big;
+    out = { titel: req.titel, einleitung: "Der Rücktritt an der Nvidia-Spitze und die Rentenreform haben den Tag geprägt.",
+      abschnitte: [
+        { ueberschrift: "📈 Wirtschaft & Börse", punkte: [{ titel: "Führungswechsel bei Nvidia", text: "Jensen Huang gibt die Führung des Chipkonzerns ab. Die Aktie verlor nachbörslich deutlich, ein Nachfolger steht noch nicht fest.", i: big.i }] },
+        { ueberschrift: "🇩🇪 Deutschland", punkte: [{ titel: "Weitere Meldung des Tages", text: "Zusammenfassung der zweiten Meldung mit den wichtigsten Einzelheiten aus dem gelieferten Material in zwei Sätzen.", i: other.i }] },
+      ],
+      steht_an: (req.termine ?? []).map((t) => `${t.tag}: ${t.was}`) };
+  } else if (user.includes('"meldungen"')) {
     const req = JSON.parse(user);
     const items = req.meldungen;
     const knownBig = (req.schon_gemeldet ?? []).find((k) => /Huang/i.test(k.titel));
@@ -121,7 +132,10 @@ async function gemini(u, req, body) {
       if (big && knownBig) doppelt = knownBig.n;
       else if (big && firstBig >= 0) doppelt = -2 - firstBig;
       if (big && firstBig < 0) firstBig = m.i;
+      const watch = (req.verfolgt ?? []).find((k) => /Rentenpaket/i.test(k.titel));
       return { i: m.i, importance: big ? 94 : ki ? 58 : 30, relevance: big ? 97 : ki ? 80 : 20, neuigkeit: old ? 20 : 90, doppelt,
+        folgt: watch && /Rente/i.test(m.titel) && !/beschließt/i.test(m.titel) ? watch.n : -1,
+        termin_datum: ki ? new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10) : "", termin_text: ki ? "OpenAI veröffentlicht das neue Modell" : "",
         event: big ? "leadership" : ki ? "product" : "other",
         titel: /steps down/i.test(m.titel) ? "Nvidia-Chef Jensen Huang tritt überraschend zurück" : m.titel,
         summary: big ? "Jensen Huang gibt die Führung von Nvidia ab. Die Aktie gibt nachbörslich deutlich nach." : "Kurzfassung der Meldung." };

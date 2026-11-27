@@ -4,6 +4,7 @@ import { fetchSource, type SourceRow } from "./feeds.ts";
 import { xfetch } from "./http.ts";
 import { LlmError, suggestTopics, suggestTopicsFallback, testKey } from "./llm.ts";
 import { runAssistant } from "./assistant.ts";
+import { writeBriefing } from "./briefing.ts";
 import { deepen } from "./deep.ts";
 import { deliver, ensureVapid } from "./push.ts";
 import { loadConfig, rescoreAll, resetCache } from "./tick.ts";
@@ -141,6 +142,26 @@ export async function handleApi(action: string, body: any, req: Request): Promis
           }
         }
         return json({ topics: suggestTopicsFallback(text), ai: false });
+      }
+      case "briefing": {
+        const key = cfg.raw.secrets?.gemini_api_key;
+        if (!key) return json({ ok: false, error: "Für das Briefing braucht die App die KI-Verbindung (Profil → KI-Einordnung)." });
+        try {
+          const week = body?.kind === "woche";
+          const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: cfg.settings.timezone || "Europe/Berlin", hour: "2-digit", hour12: false }).format(new Date()));
+          const title = week ? "Dein Wochenrückblick" : hour < 11 ? "Dein Morgen-Briefing" : hour < 17 ? "Dein Briefing" : "Dein Abend-Briefing";
+          const b = await writeBriefing(key, cfg.settings.llm_model, cfg, week ? "woche" : "tag", title, new Date(Date.now() - (week ? 7 * 24 : 18) * 3600_000), null);
+          await rpc("service_llm_note", { p_calls: 1, p_ok: true });
+          if (!b) return json({ ok: false, error: "Es sind noch zu wenige Meldungen für ein Briefing da." });
+          return json({ ok: true, id: b.id, data: b.data });
+        } catch (e) {
+          return json({ ok: false, error: friendlyLlmError(e) });
+        }
+      }
+      case "watchdog": {
+        if (!viaCron) throw new HttpError(403, "forbidden");
+        const r = await deliver(cfg, { kind: "test", title: "News: Abruf steht", body: "Seit über 10 Minuten wurden keine Nachrichten abgerufen. Meist läuft es von selbst wieder an – sonst bitte Bescheid geben.", reason: "Wächter" });
+        return json({ ok: true, ...r });
       }
       case "deepen": {
         const id = Number(body?.story_id);

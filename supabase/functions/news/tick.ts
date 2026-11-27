@@ -1,5 +1,6 @@
 // Ein Durchlauf: fällige Quellen abrufen → neue Artikel bündeln → bewerten → Push senden.
 import { admin, rpc } from "./db.ts";
+import { writeBriefing } from "./briefing.ts";
 import { deepen } from "./deep.ts";
 import { fetchSource, type FetchResult, isGoogleNewsUrl, type RawItem, type SourceRow } from "./feeds.ts";
 import { LlmError, listModels, pickModel, type Reported, scoreStories } from "./llm.ts";
@@ -147,7 +148,7 @@ function pushAllowed(cfg: Compiled, state: TickState, domain: string, importance
 
 function storyMessage(st: Story, v: Verdict): PushMessage {
   const label = v.event && EVENT_LABELS[v.event] ? EVENT_LABELS[v.event] : null;
-  const head = v.pushTopic ? v.pushTopic.name : "Eilmeldung";
+  const head = v.followUpdate ? "Neue Entwicklung" : v.pushTopic ? v.pushTopic.name : "Eilmeldung";
   const title = label ? `${head} · ${label}` : head;
   const src = st.source_count >= 2 ? `${st.source_name ?? ""} + ${st.source_count - 1} weitere`.trim() : (st.source_name ?? "");
   const reason = v.pushTopic
@@ -184,7 +185,17 @@ async function runLlm(cfg: Compiled, state: TickState, batch: Story[]): Promise<
     try {
       reported = (await rpc("recent_reported", { p_limit: 30 })) ?? [];
     } catch { /* ohne Liste weiter */ }
-    const map = await scoreStories(key, cfg.settings.llm_model, cfg, batch, reported);
+    let followed: Reported[] = [];
+    try {
+      followed = (await rpc("followed_list")) ?? [];
+    } catch { /* ohne Liste weiter */ }
+    const map = await scoreStories(key, cfg.settings.llm_model, cfg, batch, reported, followed);
+    // Termine aus den Meldungen in die Vorschau übernehmen
+    for (const [id, v] of map) {
+      if (!v.termin || v.importance < 45) continue;
+      const k = v.termin.day + "|" + normalize(v.termin.title).replace(/[^a-z0-9]+/g, " ").trim().split(" ").slice(0, 4).join(" ");
+      await admin.from("events").upsert({ day: v.termin.day, title: v.termin.title, key: k, story_id: id, importance: v.importance }, { onConflict: "key", ignoreDuplicates: true });
+    }
     cache.lastLlmAt = Date.now();
     state.llm_calls++;
     await rpc("service_llm_note", { p_calls: 1, p_ok: true });
@@ -237,7 +248,18 @@ async function scoreAndApply(cfg: Compiled, state: TickState, affected: Story[],
       if (!freshForPush(st, nowMs)) return false;
       return v.pushEligible || a.matches.some((m) => m.topic.priority === 3 && m.strength === "title") || v.importance >= cfg.settings.thr_world - 10;
     });
-    const normal = open.filter((st) => !urgent.includes(st) && (prelim.get(st.id)!.tier >= 2 || st.source_count >= 3));
+    // Meldungen, die zu einem verfolgten Ereignis gehören könnten, schaut sich die KI immer an
+    let watchTokens: string[][] = [];
+    if (open.length) {
+      try {
+        const fl: Reported[] = (await rpc("followed_list")) ?? [];
+        watchTokens = fl.map((f) => tokenize(f.title).filter((t) => t.length >= 4));
+      } catch { /* ohne Liste weiter */ }
+    }
+    const near = (x: string, y: string) => x === y || (x.length >= 5 && y.length >= 5 && (x.startsWith(y) || y.startsWith(x)));
+    const touchesWatch = (st: Story) => watchTokens.some((w) => (st.tokens ?? []).some((t) => w.some((x) => near(x, t))));
+    const watchCands = watchTokens.length ? open.filter((st) => !urgent.includes(st) && touchesWatch(st)).slice(0, 6) : [];
+    const normal = watchCands.concat(open.filter((st) => !urgent.includes(st) && !watchCands.includes(st) && (prelim.get(st.id)!.tier >= 2 || st.source_count >= 3)));
     const s = cfg.settings;
     const dayFrac = (new Date().getUTCHours() * 60 + new Date().getUTCMinutes()) / 1440;
     const paceOk = state.llm_calls < s.llm_daily_budget * Math.min(1, dayFrac + 0.2) && nowMs - cache.lastLlmAt > 40_000;
@@ -247,7 +269,7 @@ async function scoreAndApply(cfg: Compiled, state: TickState, affected: Story[],
       batch = urgent.slice(0, 12);
       if (batch.length < 12) batch = batch.concat(normal.slice(0, 12 - batch.length));
     } else if (paceOk && normal.length) {
-      normal.sort((a, b) => prelim.get(b.id)!.score - prelim.get(a.id)!.score);
+      normal.sort((a, b) => (Number(watchCands.includes(b)) - Number(watchCands.includes(a))) || prelim.get(b.id)!.score - prelim.get(a.id)!.score);
       batch = normal.slice(0, 12);
     }
     if (batch.length) {
@@ -349,17 +371,36 @@ async function checkPrices(cfg: Compiled, state: TickState, due: PriceDue[]): Pr
 
 async function maybeDigest(cfg: Compiled, state: TickState): Promise<boolean> {
   const s = cfg.settings;
-  if (!s.digest_enabled || !s.push_enabled || !(s.digest_times ?? []).length) return false;
-  if (state.devices === 0 && !s.ntfy_enabled) return false;
+  if (!s.digest_enabled || !(s.digest_times ?? []).length) return false;
   const lp = localParts(s.timezone);
+  const canPush = s.push_enabled && (state.devices > 0 || s.ntfy_enabled);
   for (const t of s.digest_times) {
     const m = parseHHMM(t);
     if (m == null) continue;
     if (lp.minutes >= m && lp.minutes < m + 20) {
-      const key = `${lp.date} ${t}`;
-      if (state.last_digest_key === key) return false;
-      await rpc("service_set_digest_key", { p_key: key });
-      state.last_digest_key = key;
+      const dayKey = `${lp.date} ${t}`;
+      if (state.last_digest_key === dayKey) return false;
+      await rpc("service_set_digest_key", { p_key: dayKey });
+      state.last_digest_key = dayKey;
+      const key = cfg.raw.secrets?.gemini_api_key;
+      // Mit KI: ein geschriebenes Briefing. Sonntagabend zusätzlich als Wochenrückblick.
+      if (key && s.llm_enabled) {
+        try {
+          const sunday = new Date().toLocaleDateString("en-US", { timeZone: s.timezone || "Europe/Berlin", weekday: "short" }) === "Sun";
+          const week = sunday && m >= 15 * 60;
+          const title = week ? "Dein Wochenrückblick" : m < 12 * 60 ? "Dein Morgen-Briefing" : m < 17 * 60 ? "Dein Mittags-Briefing" : "Dein Abend-Briefing";
+          const b = await writeBriefing(key, s.llm_model, cfg, week ? "woche" : "tag", title, new Date(Date.now() - (week ? 7 * 24 : 14) * 3600_000), dayKey);
+          await rpc("service_llm_note", { p_calls: 1, p_ok: true });
+          if (b && canPush) {
+            const n = b.data.abschnitte.reduce((x, a) => x + a.punkte.length, 0);
+            await deliver(cfg, { kind: "digest", title: `${title} ist da`, body: truncate(b.data.einleitung || `${n} Themen in ${b.data.abschnitte.length} Abschnitten`, 170), reason: `Briefing ${t} Uhr` });
+          }
+          return !!b;
+        } catch (e) {
+          console.error("briefing", e);
+        }
+      }
+      if (!canPush) return false;
       const d = await rpc("service_digest", { p_since: new Date(Date.now() - 14 * 3600_000).toISOString() });
       if (!d || d.count === 0) return false;
       const titles: string[] = d.titles ?? [];

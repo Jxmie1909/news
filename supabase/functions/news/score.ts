@@ -101,6 +101,8 @@ export interface LlmVerdict {
   relevance: number;
   novelty?: number;
   dup_of?: number | null;
+  follow_of?: number | null;
+  termin?: { day: string; title: string } | null;
   title_de?: string;
   event?: string;
   summary?: string;
@@ -140,6 +142,9 @@ export interface Verdict {
   summary_ai?: string;
   title_de?: string;
   dup_of?: number | null;
+  follow_of?: number | null;
+  termin?: { day: string; title: string } | null;
+  followUpdate?: boolean;
 }
 
 /**
@@ -437,6 +442,14 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
   }
   if (event && EVENT_LABELS[event]) reasons.push(`Art: ${EVENT_LABELS[event]}`);
   if (st.source_count >= 3) reasons.push(`${st.source_count} Quellen berichten`);
+  // Neue Entwicklung zu einem Ereignis, bei dem der Nutzer dranbleiben will: immer zeigen und melden
+  const followOf = llm?.follow_of ?? null;
+  const followUpdate = followOf != null && !isDup && !a.muted && (novelty == null || novelty >= 45);
+  if (followUpdate) {
+    tier = 3;
+    pushEligible = true;
+    reasons.push("Neue Entwicklung zu einem Ereignis, bei dem du dranbleibst");
+  }
   if (llm) reasons.push("Von der KI eingeordnet");
   if (isDup) reasons.push("Weiterer Bericht zu einem schon gemeldeten Ereignis");
   else if (novelty != null && novelty < 40) reasons.push("Kein neues Ereignis (Hintergrund oder Nachbericht)");
@@ -459,11 +472,15 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
     pushTopic,
   };
   if (llmNew) {
-    v.llm = { importance: clamp(llmNew.importance), relevance: clamp(llmNew.relevance), event: llmNew.event ?? null, novelty: llmNew.novelty ?? null, dup_of: llmNew.dup_of ?? null };
+    v.llm = { importance: clamp(llmNew.importance), relevance: clamp(llmNew.relevance), event: llmNew.event ?? null, novelty: llmNew.novelty ?? null, dup_of: llmNew.dup_of ?? null, follow_of: llmNew.follow_of ?? null };
     if (llmNew.summary) v.summary_ai = llmNew.summary;
     if (llmNew.title_de) v.title_de = llmNew.title_de;
     v.dup_of = llmNew.dup_of ?? null;
+    v.follow_of = llmNew.follow_of ?? null;
+    v.termin = llmNew.termin ?? null;
   }
+  v.followUpdate = followUpdate;
+  if (followUpdate) v.tier = tier;
   return v;
 }
 

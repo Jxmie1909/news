@@ -204,6 +204,24 @@ await shot("heute-eilmeldung");
 await noOverflow("Heute");
 assert.match(await page.locator("#status-line").textContent(), /Läuft/);
 
+step("Briefing: von selbst geschrieben, Punkte führen zur ausführlichen Meldung");
+await page.waitForSelector(".brief-body section li", { timeout: 20000 });
+assert.match(await page.locator(".brief-head strong").textContent(), /Briefing/);
+assert.ok((await page.locator(".brief-body section").count()) >= 2);
+await shot("briefing");
+await noOverflow("Briefing");
+await page.locator(".brief-body li.tap").first().click();
+await page.waitForSelector(".sheet.show .detail h1");
+assert.ok((await page.locator(".sheet.show .detail h1").textContent()).length > 10);
+await page.locator(".sheet.show .btn", { hasText: "Dranbleiben" }).click();
+await page.locator(".sheet.show .btn", { hasText: "Du bleibst dran" }).waitFor();
+await page.locator(".sheet.show .close").click();
+await page.waitForSelector(".sheet", { state: "detached" });
+await page.reload();
+await page.waitForSelector(".lead");
+assert.ok(await page.getByText("Du bleibst dran").count() >= 1, "Abschnitt mit verfolgten Ereignissen");
+await shot("heute-mit-briefing");
+
 step("Detailansicht");
 await page.locator(".lead").first().click();
 await page.waitForSelector(".sheet.show .detail h1");
