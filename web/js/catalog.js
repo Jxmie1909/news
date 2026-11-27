@@ -261,7 +261,8 @@ export function thresholdFromAnswers(answers) {
   }
   if (lowestYes == null) return 93;
   const below = lowestYes > 1 ? LEVEL_VALUE[lowestYes - 1] : 15;
-  return Math.round((LEVEL_VALUE[lowestYes] + below) / 2);
+  // Unter 45 gibt es nie einen Push (Meinungen, Analystenstimmen, Gerüchte)
+  return Math.max(45, Math.round((LEVEL_VALUE[lowestYes] + below) / 2));
 }
 
 export const PRIORITY_LABEL = { 3: "Sofort-Push", 2: "Wichtig", 1: "Nur in der App", 0: "Ausblenden" };

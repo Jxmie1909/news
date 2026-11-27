@@ -75,7 +75,7 @@ create table public.settings (
   profile_text text not null default '',
   llm_enabled boolean not null default true,
   llm_model text not null default 'gemini-flash-lite-latest',
-  llm_daily_budget int not null default 300,
+  llm_daily_budget int not null default 800,
   has_gemini_key boolean not null default false,
   sec_contact text not null default '',
   site_url text not null default '',
@@ -474,9 +474,9 @@ language plpgsql set search_path = '' as $$
 begin
   new.updated_at := now();
   if cardinality(new.languages) = 0 then new.languages := '{de}'; end if;
-  new.thr_stocks := greatest(20, least(98, new.thr_stocks));
-  new.thr_topics := greatest(20, least(98, new.thr_topics));
-  new.thr_world := greatest(30, least(99, new.thr_world));
+  new.thr_stocks := greatest(45, least(98, new.thr_stocks));
+  new.thr_topics := greatest(45, least(98, new.thr_topics));
+  new.thr_world := greatest(72, least(99, new.thr_world));
   new.push_max_per_day := greatest(0, least(100, new.push_max_per_day));
   new.muted := array(select distinct lower(trim(k)) from unnest(new.muted) k where trim(k) <> '');
   -- nur der Dienst darf dieses Kennzeichen setzen

@@ -151,7 +151,7 @@ await page.waitForSelector(".ob .kv");
 await shot("push-grenze-ergebnis");
 const thr = sql("select thr_stocks || '|' || thr_topics || '|' || thr_world from settings").split("|").map(Number);
 console.log("    Schwellen:", thr.join(" / "));
-assert.ok(thr[0] >= 58 && thr[0] <= 66 && thr[1] >= 58 && thr[1] <= 66 && thr[2] >= 60 && thr[2] <= 66, "Schwellen liegen zwischen Stufe 3 und 4");
+assert.ok(thr[0] >= 58 && thr[0] <= 66 && thr[1] >= 58 && thr[1] <= 66 && thr[2] === 72, "Schwellen liegen zwischen Stufe 3 und 4");
 await btn("Weiter").click();
 
 step("Schritt 7: Ruhezeiten");

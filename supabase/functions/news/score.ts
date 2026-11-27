@@ -336,6 +336,7 @@ export function analyze(st: Story, cfg: Compiled): Analysis {
 }
 
 const BASE_REL: Record<number, number> = { 3: 95, 2: 76, 1: 56 };
+export const PUSH_FLOOR = { stocks: 45, topics: 45, world: 72 };
 
 export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerdict | null): Verdict {
   const s = cfg.settings;
@@ -373,27 +374,35 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
   const hasTopic = active.some((m) => m.strength !== "hint");
   const domain: Verdict["domain"] = hasStock ? "stocks" : hasTopic ? "topics" : "world";
 
+  // Untergrenzen: Meinungen, Analystenstimmen und Gerüchte sind nie einen Push wert, egal wie die Regler stehen
+  const thrStocks = Math.max(s.thr_stocks, PUSH_FLOOR.stocks);
+  const thrTopics = Math.max(s.thr_topics, PUSH_FLOOR.topics);
+  const thrWorld = Math.max(s.thr_world, PUSH_FLOOR.world);
   let pushEligible = false;
   let pushTopic: Topic | null = null;
   const langOk = !st.lang || (s.languages ?? []).includes(st.lang);
   const pushMatches = active.filter((m) => m.topic.priority === 3 && m.strength === "title");
   for (const m of pushMatches) {
     if (m.topic.kind === "stock") {
-      const evOk = !m.topic.events?.length || (event != null && m.topic.events.includes(event)) || importance >= s.thr_stocks + 15;
-      if (importance >= s.thr_stocks && evOk) {
+      const evOk = !m.topic.events?.length || (event != null && m.topic.events.includes(event)) || importance >= thrStocks + 15;
+      if (importance >= thrStocks && evOk && !a.opinion) {
         pushEligible = true;
         pushTopic = m.topic;
         break;
       }
-    } else if (importance >= s.thr_topics) {
+    } else if (importance >= thrTopics && !a.opinion) {
       pushEligible = true;
       pushTopic = m.topic;
       break;
     }
   }
-  if (!pushEligible && s.world_push && langOk && importance >= s.thr_world && !a.opinion) {
-    // Ohne Themenbezug nur pushen, wenn mehrere Quellen berichten oder die KI es bestätigt
-    if (llm ? llm.importance >= s.thr_world - 5 : (st.source_count >= 3)) pushEligible = true;
+  if (!pushEligible && s.world_push && langOk && importance >= thrWorld && !a.opinion && !a.rumor) {
+    // Ohne Themenbezug nur bei wirklich großen Ereignissen: mehrere Quellen UND (falls vorhanden) Bestätigung der KI.
+    // Nachrufe nur bei ganz großen Namen.
+    const enoughSources = st.source_count >= 3;
+    const llmOk = llm ? llm.importance >= thrWorld - 3 : true;
+    const obituary = event === "death" && importance < 90;
+    if (enoughSources && llmOk && !obituary) pushEligible = true;
   }
 
   let tier = 1;
@@ -402,7 +411,7 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
   else if (
     (best && best.topic.priority >= 2 && best.strength !== "hint" && importance >= 35) ||
     (best && best.topic.priority === 3 && best.strength === "title") ||
-    importance >= s.thr_world - 12 ||
+    importance >= thrWorld - 12 ||
     (relevance >= 70 && importance >= 45)
   ) tier = 2;
   if (!langOk && tier > 0 && !best) tier = 0;

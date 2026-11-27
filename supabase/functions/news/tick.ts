@@ -263,16 +263,21 @@ async function scoreAndApply(cfg: Compiled, state: TickState, affected: Story[],
       .sort((a, b) => (b.importance - a.importance) || (langRank(byId.get(a.id)!, cfg) - langRank(byId.get(b.id)!, cfg))).slice(0, 3);
     if (cands.length) {
       // Dasselbe Ereignis nicht doppelt melden (z. B. einmal deutsch, einmal englisch)
-      const { data: recentRows } = await admin.from("stories").select("id,matched,event,tokens")
-        .gt("pushed_at", new Date(nowMs - 45 * 60_000).toISOString()).eq("kind", "news");
-      const recent: { id: number; matched: string[]; event: string | null; tokens: string[] }[] = recentRows ?? [];
+      const { data: recentRows } = await admin.from("stories").select("id,matched,event,tokens,pushed_at")
+        .gt("pushed_at", new Date(nowMs - 90 * 60_000).toISOString()).eq("kind", "news");
+      const recent: { id: number; matched: string[]; event: string | null; tokens: string[]; pushed_at: string }[] = recentRows ?? [];
       for (const v of cands) {
         const st = byId.get(v.id)!;
         if (recent.some((r) => r.id !== st.id && sameEvent(r, st, v))) continue;
+        // Nicht dasselbe Thema im Dauerfeuer: höchstens ein Push je Thema in 90 Minuten, außer bei sehr Wichtigem
+        if (v.pushTopic && v.importance < 80 && recent.some((r) => (r.matched ?? []).includes(v.pushTopic!.id))) continue;
+        // Insgesamt höchstens 3 Pushes pro Stunde, außer bei sehr Wichtigem
+        const lastHour = recent.filter((r) => nowMs - Date.parse(r.pushed_at) < 60 * 60_000).length;
+        if (lastHour >= 3 && v.importance < 85) continue;
         const blocked = pushAllowed(cfg, state, v.domain, v.importance);
         if (blocked) continue;
         await deliver(cfg, storyMessage(st, v));
-        recent.push({ id: st.id, matched: v.matched, event: v.event, tokens: st.tokens });
+        recent.push({ id: st.id, matched: v.matched, event: v.event, tokens: st.tokens, pushed_at: new Date().toISOString() });
         state.pushes_today++;
         pushed++;
       }

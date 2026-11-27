@@ -8,8 +8,6 @@ import { loadBoot, S, settings, topics } from "./state.js";
 const STEPS = ["start", "bereiche", "themen", "aktien", "wichtigkeit", "test", "grenze", "rhythmus", "freitext", "fertig"];
 
 export function thresholdLabel(v) {
-  if (v <= 25) return "fast alles";
-  if (v <= 40) return "auch Gerüchte und kleinere Meldungen";
   if (v <= 55) return "ab Ankündigungen";
   if (v <= 70) return "nur bestätigte, wichtige Nachrichten";
   return "nur ganz große Ereignisse";
