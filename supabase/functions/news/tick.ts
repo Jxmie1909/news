@@ -1,7 +1,8 @@
 // Ein Durchlauf: fällige Quellen abrufen → neue Artikel bündeln → bewerten → Push senden.
 import { admin, rpc } from "./db.ts";
+import { deepen } from "./deep.ts";
 import { fetchSource, type FetchResult, isGoogleNewsUrl, type RawItem, type SourceRow } from "./feeds.ts";
-import { LlmError, listModels, pickModel, scoreStories } from "./llm.ts";
+import { LlmError, listModels, pickModel, type Reported, scoreStories } from "./llm.ts";
 import { evaluateChart, fetchChart, pctText, type PriceDue, priceText } from "./prices.ts";
 import { deliver, type PushMessage } from "./push.ts";
 import {
@@ -178,7 +179,12 @@ function nextPacificMidnight(): Date {
 async function runLlm(cfg: Compiled, state: TickState, batch: Story[]): Promise<Map<number, LlmVerdict>> {
   const { key } = llmState(cfg, state);
   try {
-    const map = await scoreStories(key, cfg.settings.llm_model, cfg, batch);
+    // Was wurde schon gemeldet? Damit erkennt die KI Wiederholungen desselben Ereignisses.
+    let reported: Reported[] = [];
+    try {
+      reported = (await rpc("recent_reported", { p_limit: 30 })) ?? [];
+    } catch { /* ohne Liste weiter */ }
+    const map = await scoreStories(key, cfg.settings.llm_model, cfg, batch, reported);
     cache.lastLlmAt = Date.now();
     state.llm_calls++;
     await rpc("service_llm_note", { p_calls: 1, p_ok: true });
@@ -276,6 +282,15 @@ async function scoreAndApply(cfg: Compiled, state: TickState, affected: Story[],
         const blocked = pushAllowed(cfg, state, v.domain, v.importance);
         if (blocked) continue;
         await deliver(cfg, storyMessage(st, v));
+        // Ausführliche Zusammenfassung gleich vorbereiten, damit sie beim Antippen des Pushes schon da ist
+        const key = cfg.raw.secrets?.gemini_api_key;
+        if (key && cfg.settings.llm_enabled && Date.now() - nowMs < 20_000) {
+          try {
+            await deepen(key, cfg.settings.llm_model, cfg, st.id);
+            state.llm_calls++;
+            await rpc("service_llm_note", { p_calls: 1, p_ok: true });
+          } catch { /* wird sonst beim Öffnen erzeugt */ }
+        }
         recent.push({ id: st.id, matched: v.matched, event: v.event, tokens: st.tokens, pushed_at: new Date().toISOString() });
         state.pushes_today++;
         pushed++;

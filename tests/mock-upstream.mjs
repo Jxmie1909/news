@@ -108,12 +108,29 @@ async function gemini(u, req, body) {
   const user = j.contents?.[0]?.parts?.[0]?.text ?? "";
   let out;
   if (user.includes('"meldungen"')) {
-    const items = JSON.parse(user).meldungen;
+    const req = JSON.parse(user);
+    const items = req.meldungen;
+    const knownBig = (req.schon_gemeldet ?? []).find((k) => /Huang/i.test(k.titel));
+    let firstBig = -1;
     out = items.map((m) => {
       const big = /tritt.*zurück|steps down/i.test(m.titel);
       const ki = /KI-Modell/i.test(m.titel);
-      return { i: m.i, importance: big ? 94 : ki ? 58 : 30, relevance: big ? 97 : ki ? 80 : 20, event: big ? "leadership" : ki ? "product" : "other", summary: big ? "Jensen Huang gibt die Führung von Nvidia ab. Die Aktie gibt nachbörslich deutlich nach." : "Kurzfassung der Meldung." };
+      const old = /Kommentar|Sturmtief/i.test(m.titel);
+      // dasselbe Ereignis: gegen schon Gemeldetes oder gegen eine frühere Meldung im selben Stapel
+      let doppelt = -1;
+      if (big && knownBig) doppelt = knownBig.n;
+      else if (big && firstBig >= 0) doppelt = -2 - firstBig;
+      if (big && firstBig < 0) firstBig = m.i;
+      return { i: m.i, importance: big ? 94 : ki ? 58 : 30, relevance: big ? 97 : ki ? 80 : 20, neuigkeit: old ? 20 : 90, doppelt,
+        event: big ? "leadership" : ki ? "product" : "other",
+        titel: /steps down/i.test(m.titel) ? "Nvidia-Chef Jensen Huang tritt überraschend zurück" : m.titel,
+        summary: big ? "Jensen Huang gibt die Führung von Nvidia ab. Die Aktie gibt nachbörslich deutlich nach." : "Kurzfassung der Meldung." };
     });
+  } else if (user.includes('"artikel"')) {
+    const req = JSON.parse(user);
+    out = { absaetze: [`Zusammenfassung zu: ${req.schlagzeile}. Grundlage waren ${req.artikel.length} Artikel.`, "Zweiter Absatz mit Hintergrund und Zahlen aus dem Material.", "Dritter Absatz mit Einordnung der Beteiligten.", "Vierter Absatz zu dem, was noch offen ist."],
+      folgen: ["Die Aktie könnte kurzfristig stark schwanken.", "Ein Nachfolger könnte die Strategie ändern.", "Wettbewerber könnten Marktanteile gewinnen."],
+      einschaetzung: "Das ist ein bedeutendes Ereignis. Sicher ist der Rücktritt, offen ist die Nachfolge. Achte auf die nächste Mitteilung des Unternehmens." };
   } else if (user.includes('"beschreibung"')) {
     out = [{ name: "SpaceX", emoji: "🚀", keywords: ["SpaceX", "Starship"], kind: "topic", ticker: "", priority: 2, exclude: [] }, { name: "Formel 1", emoji: "🏎️", keywords: ["Formel 1", "Formula 1", "F1"], kind: "topic", ticker: "", priority: 1, exclude: [] }];
   } else out = { ok: true };
@@ -154,6 +171,10 @@ const server = http.createServer(async (req, res) => {
   if (u.hostname === "public.api.bsky.app") return send(200, bluesky(u));
   if (u.hostname === "query1.finance.yahoo.com") return send(200, chart());
   if (u.hostname === "query2.finance.yahoo.com") return send(200, JSON.stringify({ quotes: [{ symbol: "NVDA", shortname: "NVIDIA Corporation", exchDisp: "NASDAQ", quoteType: "EQUITY" }, { symbol: "NVD.DE", shortname: "NVIDIA CORP. DL-,001", exchDisp: "XETRA", quoteType: "EQUITY" }, { symbol: "X", quoteType: "OPTION" }] }));
+  // Artikelseiten für die ausführliche Zusammenfassung
+  if (/\.html$/.test(u.pathname) && !/index/.test(u.pathname)) {
+    return send(200, `<html><body><nav><p>Menü Start Politik Wirtschaft und noch viel mehr Navigationstext der nicht zum Artikel gehört</p></nav><article><h1>Titel</h1>${Array.from({ length: 6 }, (_, i) => `<p>Absatz ${i + 1}: Der Chiphersteller hat am Donnerstag mitgeteilt, dass sein Gründer die Führung abgibt. Die Aktie verlor nachbörslich deutlich an Wert, Analysten zeigten sich überrascht.</p>`).join("")}</article><footer><p>Impressum Datenschutz Kontakt und andere Fußzeilentexte die nicht dazugehören sollen</p></footer></body></html>`, "text/html; charset=utf-8");
+  }
   const f = feedFor(u);
   if (f != null) return send(200, f, "application/rss+xml");
   return send(200, rss([]), "application/rss+xml");

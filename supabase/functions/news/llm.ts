@@ -108,14 +108,21 @@ const SCORE_SYSTEM = `Du ordnest Nachrichten für genau eine Person ein. Antwort
 70–89: Sehr wichtig. Wahlergebnis, große Übernahme, Quartalszahlen mit starker Überraschung, offiziell bestätigter oder verschobener Termin eines Großprodukts, schweres Unglück, Leitzinsentscheid mit Überraschung.
 50–69: Wichtig. Neues Produkt offiziell angekündigt, Klage oder Regulierung gegen einen Konzern, Gesetz beschlossen, Quartalszahlen wie erwartet, bedeutender Transfer.
 30–49: Normale Nachricht. Analystenmeinung, Interview, kleines Update, Gerücht, Vorbericht.
-0–29: Unwichtig. Meinung, Ratgeber, Werbung, Wiederholung, Clickbait, Liveticker ohne neues Ereignis.
+0–29: Unwichtig. Meinung, Ratgeber, Werbung, Rabattaktion, Wiederholung, Clickbait, Liveticker ohne neues Ereignis.
 Mehrere unabhängige Quellen sprechen für ein echtes Ereignis. Gerüchte und Meinungen niedriger einstufen.
 
-"relevance" (0–100): Wie sehr interessiert das DIESE Person laut Profil? 90+ nur bei direktem Bezug zu ihren Themen oder Aktien. Ohne Bezug höchstens 40, außer das Ereignis ist für alle wichtig.
+"relevance" (0–100): Wie sehr interessiert das DIESE Person laut Profil? 90+ nur bei direktem Bezug zu ihren Themen oder Aktien. Ohne Bezug höchstens 40, außer das Ereignis ist für alle wichtig. Beachte ihre eigene Beschreibung und ihre Vorlieben genau.
+
+"neuigkeit" (0–100): Steckt hier etwas wirklich NEUES, das heute passiert ist oder bekannt wurde?
+80–100: frisches Ereignis oder neue Tatsache. 50–79: neue Entwicklung in einer laufenden Geschichte. 20–49: Nachbericht, Einordnung, Hintergrund, Rückblick zu etwas, das schon Tage alt ist. 0–19: zeitloser Inhalt, Ratgeber, Aufgewärmtes.
+
+"doppelt": Unter "schon_gemeldet" stehen Ereignisse, die der Person bereits gezeigt wurden. Behandelt die Meldung DASSELBE Ereignis (nur andere Quelle, andere Sprache, andere Formulierung, kein wesentlicher neuer Fakt), gib dessen Nummer "n" an. Sonst -1. Gleiches Thema, aber neues Ereignis ist NICHT doppelt. Behandeln zwei Meldungen in "meldungen" dasselbe Ereignis, gib bei der zweiten den Wert -2 minus den Index "i" der ersten an (also -2 für i=0, -3 für i=1 …).
 
 "event": eines von leadership, election, death, war, disaster, ma, market_move, earnings, legal, product, analyst, other.
 
-"summary": 1–2 Sätze auf Deutsch, sachlich und konkret, höchstens 220 Zeichen. Nur was in Titel und Text steht, nichts dazuerfinden. Wenn der Titel schon alles sagt, kurz den Kern wiedergeben.`;
+"titel": Schlagzeile auf Deutsch, sachlich, höchstens 95 Zeichen. Deutsche Schlagzeilen unverändert übernehmen, englische übersetzen. Eigennamen bleiben.
+
+"summary": 2–3 Sätze auf Deutsch, sachlich und konkret, höchstens 320 Zeichen: Was ist passiert, und warum ist es von Belang? Nur was in Titel und Text steht, nichts dazuerfinden.`;
 
 const SCORE_SCHEMA = {
   type: "ARRAY",
@@ -125,10 +132,13 @@ const SCORE_SCHEMA = {
       i: { type: "INTEGER" },
       importance: { type: "INTEGER" },
       relevance: { type: "INTEGER" },
+      neuigkeit: { type: "INTEGER" },
+      doppelt: { type: "INTEGER" },
       event: { type: "STRING" },
+      titel: { type: "STRING" },
       summary: { type: "STRING" },
     },
-    required: ["i", "importance", "relevance", "event", "summary"],
+    required: ["i", "importance", "relevance", "neuigkeit", "doppelt", "event", "titel", "summary"],
   },
 };
 
@@ -139,11 +149,16 @@ export function profileForPrompt(cfg: Compiled): Record<string, unknown> {
     aktien: t.filter((x) => x.kind === "stock").slice(0, 40).map((x) => `${x.name}${x.ticker ? ` (${x.ticker})` : ""} – ${label(x.priority)}`),
     themen: t.filter((x) => x.kind !== "stock").slice(0, 60).map((x) => `${x.name} – ${label(x.priority)}`),
     nicht_interessiert: [...(cfg.settings.muted ?? []), ...cfg.topics.filter((x) => x.priority === 0).map((x) => x.name)].slice(0, 40),
-    eigene_beschreibung: truncate(cfg.settings.profile_text ?? "", 600),
+    eigene_beschreibung_und_vorlieben: truncate(cfg.settings.profile_text ?? "", 900),
   };
 }
 
-export async function scoreStories(key: string, model: string, cfg: Compiled, stories: Story[]): Promise<Map<number, LlmVerdict>> {
+export interface Reported {
+  id: number;
+  title: string;
+}
+
+export async function scoreStories(key: string, model: string, cfg: Compiled, stories: Story[], reported: Reported[] = []): Promise<Map<number, LlmVerdict>> {
   const items = stories.map((s, i) => ({
     i,
     titel: truncate(s.title, 220),
@@ -152,8 +167,10 @@ export async function scoreStories(key: string, model: string, cfg: Compiled, st
     anzahl_quellen: s.source_count,
     sprache: s.lang ?? "",
   }));
-  const user = JSON.stringify({ profil: profileForPrompt(cfg), meldungen: items });
-  const out = await generate(key, model, SCORE_SYSTEM, user, SCORE_SCHEMA, 400 + 180 * stories.length);
+  const ownIds = new Set(stories.map((s) => s.id));
+  const known = reported.filter((r) => !ownIds.has(r.id)).slice(0, 30);
+  const user = JSON.stringify({ profil: profileForPrompt(cfg), schon_gemeldet: known.map((r, n) => ({ n, titel: truncate(r.title, 140) })), meldungen: items });
+  const out = await generate(key, model, SCORE_SYSTEM, user, SCORE_SCHEMA, 500 + 260 * stories.length, 15000);
   const map = new Map<number, LlmVerdict>();
   if (!Array.isArray(out)) throw new LlmError("Antwort hat falsches Format", 200);
   for (const r of out) {
@@ -161,11 +178,23 @@ export async function scoreStories(key: string, model: string, cfg: Compiled, st
     if (!st) continue;
     const imp = Number(r.importance), rel = Number(r.relevance);
     if (!Number.isFinite(imp) || !Number.isFinite(rel)) continue;
+    const nov = Number(r.neuigkeit);
+    const d = Number(r.doppelt);
+    let dupOf: number | null = null;
+    if (Number.isInteger(d) && d >= 0 && known[d]) dupOf = known[d].id;
+    else if (Number.isInteger(d) && d <= -2) {
+      const first = stories[-d - 2];
+      if (first && first.id !== st.id && Number(r.i) > -d - 2) dupOf = first.id;
+    }
+    const titel = typeof r.titel === "string" ? r.titel.trim() : "";
     map.set(st.id, {
       importance: Math.max(0, Math.min(100, Math.round(imp))),
       relevance: Math.max(0, Math.min(100, Math.round(rel))),
+      novelty: Number.isFinite(nov) ? Math.max(0, Math.min(100, Math.round(nov))) : undefined,
+      dup_of: dupOf,
+      title_de: titel.length >= 8 && titel.length <= 160 && titel !== st.title ? titel : undefined,
       event: typeof r.event === "string" ? r.event.toLowerCase().trim() : undefined,
-      summary: typeof r.summary === "string" ? truncate(r.summary.trim(), 260) : undefined,
+      summary: typeof r.summary === "string" ? truncate(r.summary.trim(), 360) : undefined,
     });
   }
   return map;

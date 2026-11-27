@@ -26,7 +26,7 @@ export function kicker(s, { isNew = false, time = true } = {}) {
     if (parts.length > (isNew ? 1 : 0)) parts.push(h("span", { class: "sep" }, "·"));
     parts.push(h("span", null, s.source));
   }
-  if (s.sources > 1) parts.push(h("span", { class: "muted" }, `+${s.sources - 1}`));
+  if (s.sources > 1) parts.push(h("span", { class: "muted", title: "weitere Quellen" }, `+${s.sources - 1}`));
   if (time) {
     parts.push(h("span", { class: "sep" }, "·"));
     parts.push(h("span", { class: "muted" }, ago(s.at)));
@@ -73,7 +73,7 @@ const FB = [
 ];
 
 function applyLocal(id, patch) {
-  const lists = [S.today?.top, S.today?.foryou, S.today?.more, S.ticker.items, S.saved].filter(Boolean);
+  const lists = [S.today?.new, S.today?.seen, S.ticker.items, S.saved].filter(Boolean);
   for (const l of lists) for (const s of l) if (s.id === id) Object.assign(s, patch);
 }
 
@@ -133,9 +133,9 @@ export function openStory(id, preview = null) {
             t ? h("span", { class: "topic" }, `${t.emoji ? t.emoji + " " : ""}${t.name}`) : null,
             s.event && EVENT_LABELS[s.event] && s.kind !== "price" ? h("span", { class: "badge soft" }, EVENT_LABELS[s.event]) : null),
           h("h1", null, s.title),
+          s.title_orig ? h("div", { class: "orig" }, "Original: " + s.title_orig) : null,
           h("div", { class: "meta" }, [s.source, ago(s.at), s.sources > 1 ? `${s.sources} Quellen` : null].filter(Boolean).join(" · ")),
-          (s.summary_ai || s.summary_full || s.summary) ? h("p", { class: "summary" }, s.summary_ai || s.summary_full || s.summary) : null,
-          s.summary_ai ? h("div", { class: "ai-note" }, "✨ Von der KI zusammengefasst – Einzelheiten im Originalartikel.") : null,
+          deepBlock(s),
           s.url ? h("a", { class: "btn primary block", href: s.url, target: "_blank", rel: "noopener noreferrer", style: { marginTop: "14px" } }, s.kind === "price" ? "Kurs ansehen" : "Artikel öffnen", icon("ext")) : null,
           h("div", { class: "actions2" }, saveBtn, shareBtn),
           s.kind !== "price" ? h("button", { class: "btn block", type: "button", style: { marginTop: "10px" }, onclick: async () => {
@@ -153,6 +153,38 @@ export function openStory(id, preview = null) {
           ] : null,
         );
       };
+      // Ausführliche Zusammenfassung mit Folgen und Einschätzung
+      const deepBlock = (s) => {
+        const d = s.deep_data;
+        const short = s.summary_ai || s.summary_full || s.summary;
+        if (d?.absaetze?.length) {
+          return h("div", { class: "deep" },
+            d.absaetze.map((p) => h("p", { class: "para" }, p)),
+            d.folgen?.length ? [h("h4", null, "Was daraus folgen könnte"), h("ul", { class: "folgen" }, d.folgen.map((f) => h("li", null, f)))] : null,
+            d.einschaetzung ? [h("h4", null, "Einschätzung der KI"), h("div", { class: "einschaetzung" }, d.einschaetzung)] : null,
+            h("div", { class: "ai-note" }, d.grundlage === "artikel"
+              ? `✨ Von der KI aus ${d.quellen === 1 ? "dem Originalartikel" : d.quellen + " Originalartikeln"} zusammengefasst. Folgen und Einschätzung sind Vermutungen, keine Tatsachen und keine Anlageberatung.`
+              : "✨ Von der KI aus Schlagzeilen und Kurztexten zusammengefasst, weil die Originalartikel nicht lesbar waren. Folgen und Einschätzung sind Vermutungen, keine Tatsachen und keine Anlageberatung."));
+        }
+        return h("div", { class: "deep" },
+          short ? h("p", { class: "para" }, short) : null,
+          deepState === "loading" ? h("div", { class: "deep-loading" }, h("span", { class: "spin" }), "Die KI liest den Artikel und schreibt eine ausführliche Zusammenfassung …") : null,
+          deepState === "error" ? h("div", { class: "ai-note" }, deepError, " ", h("button", { class: "linklike", type: "button", onclick: () => loadDeep() }, "Noch einmal versuchen")) : null);
+      };
+      let deepState = "idle", deepError = "";
+      const loadDeep = async () => {
+        if (!data || data.deep_data || data.kind === "price" || deepState === "loading") return;
+        deepState = "loading"; draw();
+        try {
+          const r = await fn("deepen", { story_id: data.id });
+          if (!r.ok) throw new Error(r.error || "Zusammenfassung gerade nicht möglich.");
+          data.deep_data = r.deep;
+          deepState = "done";
+        } catch (e) {
+          deepState = "error"; deepError = e.message;
+        }
+        draw();
+      };
       draw();
       try {
         const full = await rpc("story_detail", { p_id: Number(id) });
@@ -163,6 +195,7 @@ export function openStory(id, preview = null) {
         data = full;
         applyLocal(full.id, { read: true });
         draw();
+        loadDeep();
       } catch (e) {
         if (!data) clear(root, h("div", { class: "empty" }, h("div", { class: "big" }, "⚠️"), h("strong", null, "Konnte nicht geladen werden"), e.message));
       }

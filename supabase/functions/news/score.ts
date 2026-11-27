@@ -99,6 +99,9 @@ export interface Story {
 export interface LlmVerdict {
   importance: number;
   relevance: number;
+  novelty?: number;
+  dup_of?: number | null;
+  title_de?: string;
   event?: string;
   summary?: string;
 }
@@ -135,6 +138,8 @@ export interface Verdict {
   // deno-lint-ignore no-explicit-any
   llm?: any;
   summary_ai?: string;
+  title_de?: string;
+  dup_of?: number | null;
 }
 
 /**
@@ -416,6 +421,16 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
   ) tier = 2;
   if (!langOk && tier > 0 && !best) tier = 0;
   if (a.muted) pushEligible = false;
+  // Nur wirklich Neues nach oben: Aufgewärmtes und Wiederholungen bleiben im Ticker und lösen keinen Push aus
+  const novelty = typeof llm?.novelty === "number" ? llm.novelty : null;
+  const isDup = llm?.dup_of != null;
+  if (tier > 0 && (isDup || (novelty != null && novelty < 40))) {
+    tier = Math.min(tier, 1);
+    pushEligible = false;
+  } else if (pushEligible && novelty != null && novelty < 55 && importance < 85) {
+    pushEligible = false;
+    tier = 2;
+  }
 
   for (const m of active.slice(0, 3)) {
     reasons.push(m.strength === "hint" ? `Gefunden über dein Thema „${m.topic.name}“` : `Passt zu „${m.topic.name}“`);
@@ -423,6 +438,8 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
   if (event && EVENT_LABELS[event]) reasons.push(`Art: ${EVENT_LABELS[event]}`);
   if (st.source_count >= 3) reasons.push(`${st.source_count} Quellen berichten`);
   if (llm) reasons.push("Von der KI eingeordnet");
+  if (isDup) reasons.push("Weiterer Bericht zu einem schon gemeldeten Ereignis");
+  else if (novelty != null && novelty < 40) reasons.push("Kein neues Ereignis (Hintergrund oder Nachbericht)");
   if (a.learned >= 6) reasons.push("Ähnelt Meldungen, die dir gefallen haben");
   if (a.learned <= -6) reasons.push("Ähnelt Meldungen, die du abgelehnt hast");
 
@@ -442,8 +459,10 @@ export function finalize(st: Story, a: Analysis, cfg: Compiled, llmNew?: LlmVerd
     pushTopic,
   };
   if (llmNew) {
-    v.llm = { importance: clamp(llmNew.importance), relevance: clamp(llmNew.relevance), event: llmNew.event ?? null };
+    v.llm = { importance: clamp(llmNew.importance), relevance: clamp(llmNew.relevance), event: llmNew.event ?? null, novelty: llmNew.novelty ?? null, dup_of: llmNew.dup_of ?? null };
     if (llmNew.summary) v.summary_ai = llmNew.summary;
+    if (llmNew.title_de) v.title_de = llmNew.title_de;
+    v.dup_of = llmNew.dup_of ?? null;
   }
   return v;
 }

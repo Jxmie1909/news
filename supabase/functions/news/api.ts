@@ -4,6 +4,7 @@ import { fetchSource, type SourceRow } from "./feeds.ts";
 import { xfetch } from "./http.ts";
 import { LlmError, suggestTopics, suggestTopicsFallback, testKey } from "./llm.ts";
 import { runAssistant } from "./assistant.ts";
+import { deepen } from "./deep.ts";
 import { deliver, ensureVapid } from "./push.ts";
 import { loadConfig, rescoreAll, resetCache } from "./tick.ts";
 
@@ -140,6 +141,19 @@ export async function handleApi(action: string, body: any, req: Request): Promis
           }
         }
         return json({ topics: suggestTopicsFallback(text), ai: false });
+      }
+      case "deepen": {
+        const id = Number(body?.story_id);
+        if (!Number.isFinite(id) || id <= 0) throw new HttpError(400, "Meldung fehlt");
+        const key = cfg.raw.secrets?.gemini_api_key;
+        if (!key) return json({ ok: false, error: "Für die ausführliche Zusammenfassung braucht die App die KI-Verbindung (Profil → KI-Einordnung)." });
+        try {
+          const deep = await deepen(key, cfg.settings.llm_model, cfg, id);
+          await rpc("service_llm_note", { p_calls: 1, p_ok: true });
+          return json({ ok: true, deep });
+        } catch (e) {
+          return json({ ok: false, error: friendlyLlmError(e) });
+        }
       }
       case "assistant": {
         const key = cfg.raw.secrets?.gemini_api_key;

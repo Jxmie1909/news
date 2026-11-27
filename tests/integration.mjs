@@ -175,12 +175,13 @@ assert.equal(t.pushed, 0);
 ok("Kein doppelter Push beim nächsten Abruf");
 
 step("Feed in der App");
-const feed = (await sb.rpc("feed_today")).data;
-assert.ok(feed.top.length >= 1);
-assert.ok(feed.top.some((s) => /Huang/.test(s.title) && s.topics[0].name === "Nvidia" && s.pushed), JSON.stringify(feed.top.map((s) => s.title)));
-const all = [...feed.top, ...feed.foryou, ...feed.more];
+const feed = (await sb.rpc("feed_today", { p_since: new Date(Date.now() - 3600_000).toISOString() })).data;
+assert.ok(feed.new.length >= 1);
+assert.ok(feed.new.some((s) => /Huang/.test(s.title) && s.topics[0].name === "Nvidia" && s.pushed), JSON.stringify(feed.new.map((s) => s.title)));
+const all = [...feed.new, ...feed.seen];
 assert.ok(!all.some((s) => /Dschungelcamp/.test(s.title)));
-ok(`Heute: ${feed.top.length} wichtig, ${feed.foryou.length} für dich, ${feed.more.length} außerdem`);
+assert.ok(all.every((s) => s.tier >= 2), "auf der Startseite steht nur Wichtiges");
+ok(`Heute: ${feed.new.length} neu seit dem letzten Besuch, ${feed.seen.length} schon gesehen`);
 const det = (await sb.rpc("story_detail", { p_id: Number(nvId) })).data;
 assert.ok(det.articles.length >= 3);
 assert.ok(det.reasons.some((r) => /Nvidia/.test(r)));
@@ -341,6 +342,34 @@ assert.equal(t.failed, 1);
 assert.match(sql("select fail_count || '|' || last_error || '|' || (next_fetch_at > now() + interval '2 minutes') from sources where key='rss:spiegel'"), /^1\|HTTP 503\|true$/);
 ok("Fehler wird vermerkt, nächster Versuch mit Wartezeit");
 await mock({ fail: {} });
+
+step("Jedes Ereignis nur einmal, deutsche Überschrift, ausführliche Zusammenfassung");
+await mock({ geminiMode: "ok", phase: 1 });
+sql("update stories set llm = null, dup_of = null, title_de = null, tier = 2, sort_at = now() where title ilike '%Huang%'; update private.state set llm_calls = 0, llm_paused_until = null");
+let dups = 0;
+for (let i = 0; i < 30 && !dups; i++) {
+  await new Promise((r) => setTimeout(r, 3000));
+  await tick();
+  dups = Number(sql("select count(*) from stories where dup_of is not null"));
+}
+assert.ok(dups >= 1, "die zweite Fassung desselben Ereignisses wurde als Wiederholung erkannt");
+const f2 = (await sb.rpc("feed_today", { p_since: new Date(Date.now() - 3600_000).toISOString() })).data;
+const huang = [...f2.new, ...f2.seen].filter((s) => /Huang/.test(s.title));
+assert.equal(huang.length, 1, "nur eine Huang-Meldung auf der Startseite: " + JSON.stringify(huang.map((h) => h.title)));
+assert.ok(huang[0].more >= 1 && huang[0].sources >= 4, JSON.stringify(huang[0]));
+assert.ok(!/steps down/.test(huang[0].title), "Überschrift ist deutsch: " + huang[0].title);
+ok(`Eine Meldung statt zwei: „${huang[0].title}“ (${huang[0].sources} Quellen, ${huang[0].more} weiterer Bericht zusammengefasst)`);
+const dp = await fn("deepen", { story_id: huang[0].id }, auth);
+assert.equal(dp.body.ok, true, JSON.stringify(dp.body));
+assert.ok(dp.body.deep.absaetze.length >= 4 && dp.body.deep.folgen.length >= 3 && dp.body.deep.einschaetzung.length > 20);
+assert.equal(dp.body.deep.grundlage, "artikel");
+const det2 = (await sb.rpc("story_detail", { p_id: huang[0].id })).data;
+assert.ok(det2.deep_data.absaetze.length >= 4 && det2.articles.length >= 4);
+m = await mock();
+const deepReq = JSON.parse(JSON.parse(m.gemini.filter((g) => g.body.includes("weitere_schlagzeilen")).at(-1).body).contents[0].parts[0].text);
+assert.ok(deepReq.artikel.length >= 1 && /Chiphersteller/.test(deepReq.artikel[0].text) && !/Impressum|Menü/.test(deepReq.artikel[0].text), "nur der Artikeltext, ohne Menü und Fußzeile");
+ok(`Ausführliche Zusammenfassung aus ${dp.body.deep.quellen} Originalartikeln, mit Folgen und Einschätzung; wird gespeichert`);
+sql("update stories set tier = 1 where title ilike 'Kommentar:%' or title ilike 'Sturmtief%'");
 
 step("Status für die App");
 const st = (await sb.rpc("system_status")).data;

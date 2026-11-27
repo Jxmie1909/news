@@ -21,7 +21,7 @@ async function start() {
   navigator.serviceWorker?.addEventListener("message", (e) => {
     if (e.data?.type === "open") {
       if (e.data.id) openStory(e.data.id);
-      else if (S.boot) { setTab("heute"); refreshToday(true); }
+      else if (S.boot) { setTab("heute"); refreshToday(); }
     }
   });
   const state = await ensureSession();
@@ -126,7 +126,7 @@ function showShell() {
   destroyShell();
   tabbar = h("nav", { class: "tabbar", "aria-label": "Hauptnavigation" }, h("div", { class: "inner" }, TABS.map((t) =>
     h("button", { type: "button", dataset: { tab: t.id }, onclick: () => { if (S.tab === t.id) window.scrollTo({ top: 0, behavior: "smooth" }); else setTab(t.id); } }, icon(t.icon), t.label))));
-  pill = h("button", { class: "pill", type: "button", onclick: () => { hidePill(); setTab("heute"); refreshToday(true); window.scrollTo({ top: 0, behavior: "smooth" }); } });
+  pill = h("button", { class: "pill", type: "button", onclick: () => { hidePill(); setTab("heute"); refreshToday(); window.scrollTo({ top: 0, behavior: "smooth" }); } });
   ptr = h("div", { class: "ptr", "aria-hidden": "true" }, h("span", { class: "arrow" }, "↓"), h("span", { class: "spin" }));
   fab = h("button", { class: "fab", type: "button", "aria-label": "Assistent öffnen", onclick: () => openAssistant() }, "✨");
   document.body.append(tabbar, pill, ptr, fab);
@@ -144,7 +144,7 @@ function showShell() {
 
 function onVisible() {
   if (document.visibilityState !== "visible" || !tabbar) return;
-  if (S.tab === "heute" && Date.now() - S.todayAt > 60_000) refreshToday(false);
+  if (S.tab === "heute" && Date.now() - S.todayAt > 60_000) refreshToday();
   else poll();
 }
 
@@ -174,18 +174,31 @@ async function logout() {
 // Heute
 // ---------------------------------------------------------------------------
 let todayPage = null;
-let lastSeenShown = null;
+// „Seit deinem letzten Besuch“: Der Zeitpunkt bleibt während eines Besuchs stehen (auch beim Aktualisieren)
+// und rückt erst vor, wenn du die App nach einer Pause wieder öffnest oder „Alles gelesen“ antippst.
+const VISIT_GAP = 30 * 60_000;
+function visitBase(serverLastSeen) {
+  const v = store.get("visit", null);
+  const now = Date.now();
+  if (v && now - v.touched < VISIT_GAP) {
+    store.set("visit", { ...v, touched: now });
+    return v.base;
+  }
+  const base = v?.next ?? serverLastSeen ?? null;
+  store.set("visit", { base, next: new Date().toISOString(), touched: now });
+  return base;
+}
 
 function renderToday(page) {
   todayPage = page;
   drawToday();
-  if (!S.today || Date.now() - S.todayAt > 45_000) refreshToday(false);
+  if (!S.today || Date.now() - S.todayAt > 45_000) refreshToday();
 }
 
-export async function refreshToday(force) {
+export async function refreshToday() {
   try {
-    const data = await rpc("feed_today");
-    if (lastSeenShown == null || force) lastSeenShown = data.last_seen_at;
+    const base = visitBase(S.boot?.settings?.last_seen_at ?? null);
+    const data = await rpc("feed_today", { p_since: base });
     S.today = data;
     S.todayAt = Date.now();
     if (S.boot?.status) S.boot.status.last_tick_at = data.last_tick_at;
@@ -193,9 +206,18 @@ export async function refreshToday(force) {
     hidePill();
     setTimeout(() => rpc("mark_seen").catch(() => {}), 2500);
   } catch (e) {
-    if (S.tab === "heute" && !S.today) clear(todayPage, header(), h("div", { class: "empty" }, h("div", { class: "big" }, "📡"), h("strong", null, "Konnte nicht laden"), e.message, h("div", { style: { marginTop: "16px" } }, h("button", { class: "btn", onclick: () => refreshToday(true) }, "Erneut versuchen"))));
+    if (S.tab === "heute" && !S.today) clear(todayPage, header(), h("div", { class: "empty" }, h("div", { class: "big" }, "📡"), h("strong", null, "Konnte nicht laden"), e.message, h("div", { style: { marginTop: "16px" } }, h("button", { class: "btn", onclick: () => refreshToday() }, "Erneut versuchen"))));
     else toast(e.message);
   }
+}
+
+function markAllRead() {
+  const ids = (S.today?.new ?? []).map((s) => s.id);
+  if (ids.length) rpc("mark_read", { p_ids: ids }).catch(() => {});
+  const now = new Date().toISOString();
+  store.set("visit", { base: now, next: now, touched: Date.now() });
+  refreshToday();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function header() {
@@ -271,6 +293,16 @@ function collapseSame(list) {
   return kept;
 }
 
+function sinceText(iso) {
+  if (!iso) return "";
+  const d = new Date(iso), now = new Date();
+  const hm = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (d.getTime() >= start) return `seit ${hm} Uhr`;
+  if (d.getTime() >= start - 86400_000) return `seit gestern ${hm} Uhr`;
+  return `seit ${d.toLocaleDateString("de-DE", { weekday: "long" })}`;
+}
+
 function drawToday() {
   if (!todayPage || S.tab !== "heute") return;
   const d = S.today;
@@ -279,31 +311,27 @@ function drawToday() {
     updateStatusLine();
     return;
   }
-  const total = d.top.length + d.foryou.length + d.more.length;
+  const fresh = collapseSame(d.new ?? []);
+  const seen = d.seen ?? [];
   const notes = h("div");
   const out = [header(), notes];
-  const ls = lastSeenShown;
-  if (total === 0) {
-    out.push(h("div", { class: "empty" }, h("div", { class: "big" }, "☕"), h("strong", null, "Noch ist es ruhig"),
-      topics().length ? "Sobald etwas zu deinen Themen passiert, steht es hier. Die ersten Meldungen kommen meist nach wenigen Minuten." : "Lege im Profil Themen an, damit hier etwas erscheint."));
+  if (fresh.length) {
+    const top = fresh.filter((s) => s.tier === 3), rest = fresh.filter((s) => s.tier !== 3);
+    out.push(h("h2", { class: "sec" }, "Neu für dich", h("span", { class: "count" }, `${fresh.length} · ${sinceText(d.since)}`)));
+    if (top.length) out.push(h("div", null, top.map((s) => leadCard(s))));
+    if (rest.length) out.push(h("div", null, rest.map((s, i) => (!top.length && i === 0 ? leadCard(s) : storyRow(s)))));
+    out.push(h("div", { class: "done" }, h("div", { class: "check" }, "✓"), h("strong", null, "Das war alles Neue"),
+      h("span", null, "Jedes Ereignis steht hier nur einmal, weitere Berichte dazu sind zusammengefasst."),
+      h("div", { style: { marginTop: "14px" } }, h("button", { class: "btn small primary", onclick: markAllRead }, "Alles gelesen"))));
   } else {
-    if (d.top.length) {
-      const top = collapseSame(d.top);
-      out.push(h("h2", { class: "sec hot" }, h("span", { class: "dot hot" }), "Wichtig", h("span", { class: "count" }, String(top.length))));
-      out.push(h("div", null, top.map((s, i) => (i < 2 || s.image ? leadCard(s, { lastSeen: ls }) : storyRow(s, { lastSeen: ls })))));
-    }
-    if (d.foryou.length) {
-      out.push(h("h2", { class: "sec" }, "Für dich", h("span", { class: "count" }, String(d.foryou.length))));
-      out.push(h("div", null, d.foryou.map((s) => storyRow(s, { lastSeen: ls }))));
-    }
-    if (d.more.length) {
-      out.push(h("h2", { class: "sec" }, "Außerdem"));
-      out.push(h("div", null, d.more.map((s) => storyRow(s, { compact: true, lastSeen: ls }))));
-    }
-    out.push(h("div", { class: "done" }, h("div", { class: "check" }, "✓"), h("strong", null, "Du bist auf dem neuesten Stand"),
-      h("span", null, "Mehr gibt es gerade nicht – alles Weitere findest du im Ticker."),
-      h("div", { style: { marginTop: "14px" } }, h("button", { class: "btn small", onclick: () => setTab("ticker") }, "Zum Ticker"))));
+    out.push(h("div", { class: "done", style: { paddingTop: "34px" } }, h("div", { class: "check" }, "✓"), h("strong", null, "Nichts Neues " + sinceText(d.since)),
+      h("span", null, topics().length ? "Sobald etwas wirklich Neues zu deinen Themen passiert, steht es hier." : "Lege im Profil Themen an, damit hier etwas erscheint.")));
   }
+  if (seen.length) {
+    out.push(h("h2", { class: "sec" }, "Schon gesehen", h("span", { class: "count" }, "letzte 36 Stunden")));
+    out.push(h("div", null, seen.map((s) => storyRow(s, { compact: true }))));
+  }
+  out.push(h("div", { style: { textAlign: "center", padding: "22px 0 4px" } }, h("button", { class: "btn small", onclick: () => setTab("ticker") }, "Alle Meldungen im Ticker")));
   clear(todayPage, out);
   updateStatusLine();
   hintCards().then((cards) => clear(notes, cards)).catch(() => {});
@@ -461,7 +489,7 @@ function setupPullToRefresh() {
       ptr.classList.add("busy");
       ptr.style.transform = "translateY(14px)";
       try {
-        if (S.tab === "heute") await refreshToday(true);
+        if (S.tab === "heute") await refreshToday();
         else await view.querySelector(".tab-page")?._reload?.();
       } finally {
         busyNow = false;
