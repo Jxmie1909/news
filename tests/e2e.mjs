@@ -75,7 +75,7 @@ await btn("Weiter").click();
 step("Schritt 2: Unterthemen");
 await page.waitForSelector(".ob h3");
 assert.ok((await page.locator(".chip.on").count()) >= 8, "Vorschläge sind vormarkiert");
-await page.locator(".chip", { hasText: "GTA 6" }).click(); // war vormarkiert → abwählen
+await page.locator(".chip", { hasText: "PlayStation" }).click(); // war vormarkiert → abwählen
 await page.locator(".chip", { hasText: "GTA 6" }).click(); // und wieder wählen
 await page.locator(".chip", { hasText: "Wahlen" }).click();
 await page.locator(".chip", { hasText: "+ Eigenes Thema" }).click();

@@ -51,7 +51,6 @@ export const CATEGORIES = [
   {
     id: "gaming", name: "Gaming", emoji: "🎮",
     topics: [
-      { id: "gaming.gta", name: "GTA 6", emoji: "🌴", p: 3, kw: ["GTA 6", "GTA VI", "Rockstar Games", "Grand Theft Auto"] },
       { id: "gaming.playstation", name: "PlayStation", emoji: "🎮", p: 1, kw: ["PlayStation", "PS5", "PS6", "Sony Interactive"] },
       { id: "gaming.xbox", name: "Xbox", emoji: "❎", p: 1, kw: ["Xbox", "Game Pass"] },
       { id: "gaming.nintendo", name: "Nintendo", emoji: "🍄", p: 1, kw: ["Nintendo", "Switch 2", "Zelda", "Mario"] },
@@ -61,6 +60,7 @@ export const CATEGORIES = [
       { id: "gaming.fortnite", name: "Fortnite", emoji: "🪂", p: 1, kw: ["Fortnite", "Epic Games"] },
       { id: "gaming.releases", name: "Große Releases", emoji: "📅", p: 2, kw: ["Releasedatum", "release date", "Release-Termin", "Game Awards"] },
       { id: "gaming.hardware", name: "Grafikkarten", emoji: "🧮", p: 1, kw: ["Grafikkarte", "GeForce", "Radeon", "RTX"] },
+      { id: "gaming.gta", name: "GTA 6", emoji: "🌴", p: 1, kw: ["GTA 6", "GTA VI", "Rockstar Games", "Grand Theft Auto"] },
       { id: "gaming.esport", name: "E-Sport", emoji: "🏆", p: 1, kw: ["E-Sport", "Esports", "League of Legends", "Counter-Strike"] },
     ],
   },
